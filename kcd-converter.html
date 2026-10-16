@@ -157,6 +157,35 @@ const CONV = (() => {
   const TOTAL_RE = /^(小計|合計|総計|計|中計|大計|総合計|本工事合計|工事合計|見積合計|御見積合計|NET|ネット|総額|.*合計|.*小計|値引|出精値引.*)$/;
   const isTotalName = (name) => TOTAL_RE.test(nospace(splitNum(name).body).replace(/[¥￥]/g, ''));
   const isDitto = (s) => /^(〃|"|''|々|同上)$/.test(nospace(s));
+  // 〃（ディットー）の処理
+  const DIT = /^(〃|”|"|''|々|同上|仝)$/;
+  const hasDitto = (s) => !!s && String(s).split(/[ 　]+/).some(t => DIT.test(t.trim()) || /〃/.test(t));
+  const CODE = /^[A-Za-zＡ-Ｚａ-ｚ]{1,6}[-－‐][0-9０-９][0-9０-９\-－‐～~.,、・]*$/;
+  function splitTok(s) { return String(s || '').split(/[ 　]+/).filter(Boolean); }
+  // 上の行の文字を、〃の位置の語に当てはめる
+  function dittoText(cur, above) {
+    above = String(above || '');
+    if (!above) return String(cur).replace(/〃/g, '').trim();
+    const ct = splitTok(cur), at = splitTok(above);
+    const cCode = ct.length && CODE.test(nfkc(ct[0])) ? ct.shift() : null;
+    const aCode = at.length && CODE.test(nfkc(at[0])) ? at.shift() : null;
+    if (!ct.length || (!cCode && ct.every(t => DIT.test(t) || /^〃+$/.test(t)))) return [cCode || aCode, ...at].filter(Boolean).join(' ');
+    const out = [];
+    for (let i = 0; i < ct.length; i++) {
+      const t = ct[i];
+      if (!(DIT.test(t) || /^〃+$/.test(t))) { out.push(t.replace(/〃/g, at[i] || '')); continue; }
+      let src = at[i] != null ? at[i] : (i === 0 ? at.join(' ') : '');
+      // 「〃 室内機」の上が「パッケージ型空調室外機」：最後の語（室外機）を新しい語（室内機）に置き換える
+      const next = ct[i + 1];
+      if (next && !DIT.test(next) && at[i + 1] == null && src) {
+        const n = [...next].length, tail = [...src].slice(-n).join('');
+        const share = [...next].filter(ch => tail.includes(ch)).length;
+        if (n >= 2 && [...src].length > n && share >= Math.ceil(n / 2)) src = [...src].slice(0, -n).join('');
+      }
+      if (src) out.push(src);
+    }
+    return [cCode || (ct.length ? null : aCode), ...out].filter(Boolean).join(' ');
+  }
   function parseNum(v) {
     if (v == null) return null;
     if (typeof v === 'number') return isFinite(v) ? v : null;
@@ -575,14 +604,16 @@ const CONV = (() => {
       if (r.name && !r.unit && !hasNum && !r.rem) { r.kind = 'head'; continue; }
       r.kind = 'item';
     }
-    // 名称の補完（〃・空欄）
-    let lastName = '';
+    // 名称・規格・単位・備考の補完（〃は上の行の文字を写す。空欄の名称は上の名称）
+    let prev = null;
     for (const r of rs) {
-      if (r.kind !== 'item') { if (r.kind === 'head') lastName = ''; continue; }
-      if (isDitto(r.name)) r.name = lastName || r.name;
-      else if (/[〃]/.test(r.name) && lastName) { const base = lastName.replace(/^[A-Za-zＡ-Ｚ]{1,4}[-－][0-9０-９]+\S*\s+/, ''); r.name = r.name.replace(/〃/, base); }
-      else if (!r.name && fillName && (r.qty != null || r.amt != null) && lastName) r.name = lastName;
-      if (r.name && !isDitto(r.name)) lastName = r.name;
+      if (r.kind !== 'item') { if (r.kind === 'head') prev = null; continue; }
+      if (prev) {
+        if (hasDitto(r.name)) { r.name = dittoText(r.name, prev.name); if (!r.unit) r.unit = prev.unit; }
+        else if (!r.name && fillName && (r.qty != null || r.amt != null)) r.name = prev.name;
+        for (const f of ['spec', 'unit', 'rem']) if (hasDitto(r[f])) r[f] = dittoText(r[f], prev[f]);
+      }
+      if (r.name && !hasDitto(r.name)) prev = { name: r.name, spec: r.spec, unit: r.unit, rem: r.rem };
       r.body = r.name; r.key = key(r.name);
     }
     // 見出しの字下げ（名称の書き出し位置）：明細より左にある見出しは「工種」
