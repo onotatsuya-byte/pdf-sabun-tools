@@ -100,7 +100,7 @@ summary{cursor:pointer;color:var(--ink2)}
       <div class="formats"><span>.pdf</span><span>.xls</span><span>.xlsx</span></div>
     </div>
     <input type="file" id="file" accept=".pdf,.xls,.xlsx,.xlsm" hidden>
-    <p class="note">業者見積の内訳明細書（名称・規格・数量・単位・単価・金額・備考）を読み取ります。ファイルはこのブラウザの中で処理します。</p>
+    <p class="note">業者見積の内訳明細書（名称・規格・数量・単位・単価・金額・備考）を読み取ります。KCDの金額は「数量×単価」で出します。単価が空欄の行（1式など）は、金額÷数量を単価にします。ファイルはこのブラウザの中で処理します。</p>
   </section>
 
   <section class="step off" id="s2">
@@ -111,6 +111,7 @@ summary{cursor:pointer;color:var(--ink2)}
     <div id="result" hidden>
       <div class="sum" id="sum"></div>
       <div class="msg" id="verdict" style="margin-top:12px"></div>
+      <details id="chgBox" style="margin-top:12px" hidden><summary id="chgSum"></summary><div class="tree" id="chg"></div></details>
       <details style="margin-top:12px"><summary>大項目・中項目の内訳を見る</summary><div class="tree" id="tree"></div></details>
     </div>
   </section>
@@ -802,6 +803,18 @@ const CONV = (() => {
     return ts;
   }
 
+  // 明細行の数量・単価・金額（KCDに書く値）
+  function leafVals(f) {
+    let qty = f.qty, up = f.up;
+    const amt0 = f.amt;
+    if (up == null && amt0 != null) {
+      if (qty == null || qty === 0) qty = 1;
+      up = amt0 / qty;
+      if (Math.abs(up - Math.round(up * 10000) / 10000) > 1e-9) up = Math.round(up * 10000) / 10000;
+    }
+    const amt = qty != null && up != null ? Math.round(qty * up) : (amt0 != null ? Math.round(amt0) : 0);
+    return { qty, up, amt };
+  }
   // ---------- 一覧の計算（親の金額＝子の合計） ----------
   // flat を受け取り、各行に kids, calcAmt, calcUp を付ける。チェック結果も返す
   function compute(flat) {
@@ -824,14 +837,17 @@ const CONV = (() => {
         const q = f.qty == null ? 1 : f.qty;
         f.calcUp = s; f.calc = Math.round(s * q);
       } else {
-        f.calc = f.amt != null ? f.amt : (f.qty != null && f.up != null ? Math.round(f.qty * f.up) : 0);
+        // 書き出しは数量・単価が基本：金額＝数量×単価。単価がなければ金額÷数量（1式なら金額）を単価に
+        const lv = leafVals(f);
+        f.calc = lv.amt; f.kQty = lv.qty; f.kUp = lv.up;
+        f.changed = f.amt != null && lv.amt !== Math.round(f.amt);
       }
     }
     const issues = [];
     for (const f of use) {
       f.warn = [];
       if (f.t !== 'item') continue;
-      if (!f.hasKids && f.qty != null && f.up != null && f.amt != null && Math.abs(f.qty * f.up - f.amt) >= 1) f.warn.push('数量×単価≠金額');
+      if (!f.hasKids && f.changed) f.warn.push('数量×単価≠金額');
       if (f.hasKids && f.srcAmt != null && Math.abs(f.srcAmt - f.calc) >= 1) f.warn.push('内訳の合計が元の金額と違う');
       if (f.hasKids && f.totals && f.totals.length && !f.totals.some(t => Math.abs(t - f.calc) < 1)) f.warn.push('小計と違う');
       if (f.warn.length) issues.push(f);
@@ -905,9 +921,7 @@ const CONV = (() => {
       let up, amt, qty;
       if (f.hasKids) { qty = f.qty == null ? 1 : f.qty; up = f.calcUp; amt = f.calc; }
       else {
-        qty = f.qty; amt = f.amt;
-        up = f.up != null ? f.up : (amt != null && qty ? amt / qty : null);
-        if (amt == null && qty != null && up != null) amt = Math.round(qty * up);
+        const lv = leafVals(f); qty = lv.qty; up = lv.up; amt = lv.amt;
       }
       out.push({ d: f.d, kind: 0, name: names[0], spec: specs[0], unit, rem: rem[0], qty: qty || 0, up: up || 0, amt: amt || 0, src: f });
       const extra = Math.max(names.length, specs.length, rem.length) - 1;
@@ -1136,21 +1150,30 @@ JSON配列だけを返してください。`;
       + `<span>見積書の合計</span><b>${yen(d)}</b>`
       + (d != null ? `<span>差額</span><b>${yen(t - d)}</b>` : '')
       + `<span>KCDの行数</span><b>${rb.rows.length.toLocaleString()}</b>`;
+    const chg = calc.rows.filter(f => f.t === 'item' && !f.hasKids && f.changed);
+    const chgSum = chg.reduce((a, f) => a + (f.calc - f.amt), 0);
     const mism = calc.issues.filter(f => f.hasKids);
     const v = $('#verdict');
     let msg, cls;
     if (d != null && Math.abs(t - d) < 1 && !mism.length) { cls = 'ok'; msg = '見積書の合計と1円単位で一致しました。'; }
     else if (d == null) { cls = 'wn'; msg = '見積書に「合計」の行がないため照合していません。表紙の金額と見比べてください。'; }
-    else { cls = 'wn'; msg = (Math.abs(t - d) < 1 ? '合計は一致しましたが、' : `見積書の合計と ${yen(t - d)} 円違います。`) + (mism.length ? '内訳で「!」の付いた工種は、明細の合計が見積書の小計と合っていません（見積書側の端数の場合もあります）。' : ''); }
+    else if (chg.length && Math.abs((t - d) - chgSum) < 1) { cls = 'wn'; msg = `見積書の合計と ${yen(t - d)} 円違います。差は、数量×単価で金額を出し直した下の ${chg.length} 行の分です。見積書の金額の誤りの可能性があるので、業者に確認してください。`; }
+    else { cls = 'wn'; msg = (Math.abs(t - d) < 1 ? '合計は一致しましたが、' : `見積書の合計と ${yen(t - d)} 円違います。`) + (mism.length ? '内訳で「!」の付いた工種は、明細の合計が見積書の小計と合っていません。' : '') + (chg.length ? `数量×単価で金額を出し直した行が ${chg.length} 行あります。` : ''); }
     if (built.bad.length) msg += `　KCDで使えない文字（${built.bad.slice(0, 6).join(' ')}）は「？」にしました。`;
     if (notes.length) msg += '　' + notes.join('　');
     v.className = 'msg ' + cls; v.textContent = msg;
+    // 出し直した行を含む工種は「!」にしない（差の理由が分かっているため）
+    const chgSet = new Set(); for (const f of chg) for (let p = f.parent; p; p = p.parent) chgSet.add(p);
     $('#tree').innerHTML = calc.rows.filter(f => f.t === 'item' && (f.hasKids || (f.d === 1 && f.calc))).map(f => {
-      const bad = f.hasKids && f.warn.some(w => /元の金額|小計/.test(w));
+      const bad = f.hasKids && !chgSet.has(f) && f.warn.some(w => /元の金額|小計/.test(w));
       return `<div><span style="padding-left:${(f.d - 1) * 16}px" class="${bad ? 'w' : ''}">${bad ? '! ' : ''}${esc(f.name || '（名称なし）')}</span><b class="num">${yen(f.calc)}</b></div>`;
     }).join('');
+    $('#chgBox').hidden = !chg.length;
+    $('#chgSum').textContent = `数量×単価で金額を出し直した行（${chg.length}行・差額 ${yen(chgSum)}）`;
+    $('#chg').innerHTML = chg.map(f => `<div><span>${esc(f.src)}　${esc(f.name || '（名称なし）')}${f.spec ? ' ' + esc(f.spec) : ''}　${(+f.kQty).toLocaleString('ja-JP')} × ${yen(f.kUp)}</span><b class="num">${yen(f.amt)} → ${yen(f.calc)}</b></div>`).join('');
+    $('#chgBox').open = chg.length > 0 && chg.length <= 20;
     $('#result').hidden = false;
-    $('#result details').open = !!mism.length;
+    $('#tree').closest('details').open = !!mism.length;
   }
 
   // ---------- 3 保存 ----------
