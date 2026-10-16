@@ -589,6 +589,19 @@ const CONV = (() => {
       }
       rs.push(r);
     }
+    // 1b) 記号付きの名称が2行に折り返したもの（「EHP-3-1 〃 室内機 外気」＋「処理 … 1台」）を1行に
+    for (let i = 0; i + 1 < rs.length; i++) {
+      const a = rs[i], b = rs[i + 1];
+      const aHas = a.unit || a.qty != null || a.up != null || a.amt != null;
+      const bHas = b.unit || b.qty != null || b.amt != null;
+      const t0 = splitTok(a.name)[0];
+      const longWrap = !aHas && bHas && !a.spec && !a.no && [...(a.name || '')].length >= 12 && !/[。、:：）)]$/.test(a.name) && !splitNum(a.name).style && b.name && [...b.name].length <= 8 && !isTotalName(b.name) && !b.no && b.page === a.page && !/^[※＜<（(]/.test(a.name);
+      if (longWrap && !hasDitto(b.name)) { b.name = a.name + b.name; rs.splice(i, 1); i--; continue; }
+      if (!aHas && bHas && !a.spec && t0 && CODE.test(nfkc(t0)) && b.name && !/\s/.test(b.name) && [...b.name].length <= 6 && !hasDitto(b.name) && !CODE.test(nfkc(splitTok(b.name)[0] || '')) && b.page === a.page) {
+        const join = /[\u3040-\u9fff]$/.test(a.name) && /^[\u3040-\u9fff]/.test(b.name) ? '' : ' ';
+        b.name = a.name + join + b.name; a.kind0 = 'merged'; rs.splice(i, 1); i--;
+      }
+    }
     // 2) 種類
     for (const r of rs) {
       const sp = splitNum(r.no ? r.no + '. ' + r.name : r.name);
@@ -605,15 +618,17 @@ const CONV = (() => {
       r.kind = 'item';
     }
     // 名称・規格・単位・備考の補完（〃は上の行の文字を写す。空欄の名称は上の名称）
-    let prev = null;
+    let prev = null, prevF = null;
     for (const r of rs) {
       if (r.kind !== 'item') { if (r.kind === 'head') prev = null; continue; }
+      if (!prev && prevF) for (const f of ['spec', 'unit', 'rem']) if (hasDitto(r[f])) r[f] = dittoText(r[f], prevF[f]);
       if (prev) {
         if (hasDitto(r.name)) { r.name = dittoText(r.name, prev.name); if (!r.unit) r.unit = prev.unit; }
         else if (!r.name && fillName && (r.qty != null || r.amt != null)) r.name = prev.name;
         for (const f of ['spec', 'unit', 'rem']) if (hasDitto(r[f])) r[f] = dittoText(r[f], prev[f]);
       }
       if (r.name && !hasDitto(r.name)) prev = { name: r.name, spec: r.spec, unit: r.unit, rem: r.rem };
+      prevF = { name: r.name, spec: r.spec, unit: r.unit, rem: r.rem };
       r.body = r.name; r.key = key(r.name);
     }
     // 見出しの字下げ（名称の書き出し位置）：明細より左にある見出しは「工種」
