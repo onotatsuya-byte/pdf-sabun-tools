@@ -1,0 +1,2505 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>図面線分抽出 → DXF書き出し v17</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --ink:#1c2024;
+    --paper:#eef0f3;
+    --panel:#ffffff;
+    --line:#d7dbe0;
+    --canvas-bg:#15181c;
+    --accent:#d98c2b;
+    --accent-dim:#8a5a1c;
+    --hover:#4fd1e8;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--sans); background:var(--paper); color:var(--ink);
+    height:100vh; overflow:hidden;
+  }
+  #app{ display:grid; grid-template-columns: 1fr 320px; grid-template-rows: 52px 1fr; height:100vh; }
+  header{
+    grid-column:1/3; display:flex; align-items:center; gap:16px;
+    padding:0 16px; background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  header h1{ font-size:14px; font-weight:600; margin:0; letter-spacing:.01em; }
+  header .sep{ width:1px; height:22px; background:var(--line); }
+  .filebtn{
+    font-size:12.5px; padding:6px 12px; border-radius:5px; border:1px solid var(--line);
+    background:#fafbfc; cursor:pointer;
+  }
+  .filebtn:hover{ background:#f0f2f4; }
+  #status{ font-size:12px; color:#6b7280; }
+  #canvasWrap{
+    position:relative; background:var(--canvas-bg); overflow:auto;
+    display:block;
+  }
+  #canvasStage{ position:relative; margin:24px auto; }
+  canvas{ display:block; }
+  #baseCanvas{ position:absolute; top:0; left:0; filter:grayscale(1) brightness(1.15); opacity:.5; }
+  #overlayCanvas{ position:absolute; top:0; left:0; cursor:crosshair; }
+  #canvasWrap.dragover{ outline:2px dashed var(--accent); outline-offset:-8px; }
+  #empty{
+    color:#6b7280; font-size:13px; text-align:center; margin:12vh auto 0; padding:40px;
+    max-width:360px; line-height:1.7;
+  }
+  aside{
+    background:var(--panel); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; overflow-y:auto;
+  }
+  .section{ padding:14px 16px; border-bottom:1px solid var(--line); }
+  .section h2{ font-size:11.5px; font-weight:600; margin:0 0 10px; color:#4b5563; letter-spacing:.02em; }
+  #bucketList{ flex:none; max-height:260px; overflow-y:auto; padding:6px 0; }
+  .bucket{
+    display:flex; align-items:center; gap:9px; padding:8px 16px; cursor:pointer;
+    border-bottom:1px solid #f1f2f4;
+  }
+  .bucket:hover{ background:#f7f8fa; }
+  .bucket input{ flex:none; width:15px; height:15px; accent-color:var(--accent); cursor:pointer; }
+  .bucket input.chk-ocr{ accent-color:var(--hover); width:13px; height:13px; }
+  .bucket .ocrlbl{ font-size:9.5px; color:#8a8f98; display:flex; flex-direction:column; align-items:center; gap:2px; flex:none; }
+  .swatch{ flex:none; width:20px; height:4px; border-radius:2px; }
+  .bmeta{ flex:1; min-width:0; }
+  .bmeta .label{ font-size:12.5px; font-weight:500; }
+  .bmeta .sub{ font-size:11px; color:#8a8f98; font-family:var(--mono); }
+  .toolbtn{
+    font-size:12px; padding:5px 10px; border-radius:5px; border:1px solid var(--line);
+    background:#fafbfc; cursor:pointer; color:var(--ink);
+  }
+  .toolbtn:hover{ background:#f0f2f4; }
+  .toolrow{ display:flex; gap:8px; margin-bottom:2px; }
+  #calibBox input[type=text]{
+    width:100%; font-family:var(--mono); font-size:12.5px; padding:6px 8px;
+    border:1px solid var(--line); border-radius:5px; margin-top:6px;
+  }
+  .scaleRow{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; }
+  .scaleRow span{ flex:none; }
+  #calibBox .scaleRow input[type=text]{ margin-top:0; font-size:14px; font-weight:600; }
+  #scaleDetected{ margin-top:6px; }
+  #calibStatus{ font-size:11.5px; color:#8a8f98; margin-top:8px; line-height:1.6; }
+  #ocrBox{ display:none; }
+  #ocrList{ max-height:220px; overflow-y:auto; margin-top:8px; }
+  .ocrRow{ display:flex; align-items:center; gap:7px; padding:5px 0; border-bottom:1px solid #f1f2f4; }
+  .ocrRow input[type=checkbox]{ flex:none; width:14px; height:14px; accent-color:var(--hover); }
+  .ocrRow input[type=text]{
+    width:70px; font-family:var(--mono); font-size:12px; padding:3px 6px;
+    border:1px solid var(--line); border-radius:4px;
+  }
+  .ocrRow .conf{ font-size:10.5px; color:#b0b4bb; font-family:var(--mono); }
+  #ocrStatus{ font-size:11.5px; color:#8a8f98; margin-top:8px; line-height:1.6; }
+  #overlayCanvas.rectmode{ cursor: crosshair; }
+  #rectModeBtn.active{ background:var(--ink); color:#fff; }
+  #exportBtn{
+    width:100%; padding:11px; border:none; border-radius:6px; background:var(--ink);
+    color:#fff; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  #exportBtn:disabled{ background:#c7cbd1; cursor:not-allowed; }
+  #exportBtn:not(:disabled):hover{ background:#000; }
+  .hint{ font-size:11.5px; color:#8a8f98; line-height:1.6; margin-top:6px; }
+  #pageSel{ font-size:12px; padding:4px 6px; border-radius:5px; border:1px solid var(--line); }
+  #rasterBox.suggest{ background:#fff7ec; box-shadow:inset 3px 0 0 var(--accent); }
+  .prm{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:2px 8px; margin-top:8px; font-size:12px; }
+  .prm input[type=range]{ grid-column:1/3; width:100%; accent-color:var(--accent); }
+  .prm .val{ font-family:var(--mono); font-size:11px; color:#6b7280; }
+  .prm .ends{ grid-column:1/3; display:flex; justify-content:space-between; font-size:10.5px; color:#9aa0a8; margin-top:-2px; }
+  .chkrow{ display:flex; align-items:center; gap:7px; font-size:12px; margin-top:7px; cursor:pointer; }
+  .chkrow input{ accent-color:var(--accent); width:14px; height:14px; margin:0; }
+  #rasterRunBtn{ width:100%; margin-top:12px; padding:9px; border:none; border-radius:6px; background:var(--accent); color:#fff; font-size:12.5px; font-weight:600; cursor:pointer; }
+  #rasterRunBtn:hover{ background:var(--accent-dim); }
+  #rasterRunBtn:disabled{ background:#c7cbd1; cursor:wait; }
+  #rasterStatus{ font-size:11.5px; color:#8a8f98; margin-top:8px; line-height:1.6; white-space:pre-line; }
+  #rasterRes{ font-size:12px; padding:4px 6px; border-radius:5px; border:1px solid var(--line); width:100%; margin-top:4px; }
+  .toolbtn.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .toolbtn:disabled{ opacity:.45; cursor:not-allowed; }
+  #editStatus{ font-size:11.5px; color:#8a8f98; margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>図面線分抽出 → DXF</h1>
+    <div class="sep"></div>
+    <label class="filebtn">
+      PDFを開く
+      <input id="fileInput" type="file" accept="application/pdf" style="display:none;">
+    </label>
+    <select id="pageSel" style="display:none;"></select>
+    <span id="status"></span>
+  </header>
+
+  <div id="canvasWrap">
+    <div id="empty">PDFファイルを開くと、図面内のベクター線を色・線幅ごとにグループ化して表示します。<br>スキャンした紙図面の場合は、右の「スキャン図面の線認識」で線を起こせます。<br>右のリストで含める線を選び、DXFとして書き出せます（Jw_cadではDXF読込で開けます）。<br><br>ここにPDFをドラッグ＆ドロップしてもかまいません。</div>
+    <div id="canvasStage" style="display:none;">
+      <canvas id="baseCanvas"></canvas>
+      <canvas id="overlayCanvas"></canvas>
+    </div>
+  </div>
+
+  <aside>
+    <div class="section" id="rasterBox" style="display:none;">
+      <h2>スキャン図面の線認識</h2>
+      <div class="hint" style="margin-top:0;">紙図面をスキャンしたPDF向けです。画像から線・円弧を認識し、編集できる線データに置き換えます。文字は線として拾わないよう自動で除外します。</div>
+      <label style="font-size:12px; display:block; margin-top:8px;">解析の細かさ
+        <select id="rasterRes">
+          <option value="8">標準（約200dpi・速い）</option>
+          <option value="12">高精細（約300dpi・細い線向け）</option>
+        </select>
+      </label>
+      <div class="prm"><span>線の拾い方</span><span class="val" id="vSens"></span>
+        <input type="range" id="pSens" min="1" max="5" step="1" value="3">
+        <div class="ends"><span>濃い線だけ</span><span>薄い線も</span></div></div>
+      <div class="prm"><span>揺れ補正（手書き図面は強めに）</span><span class="val" id="vSmooth"></span>
+        <input type="range" id="pSmooth" min="1" max="5" step="1" value="2">
+        <div class="ends"><span>弱い・忠実</span><span>強い・整理</span></div></div>
+      <div class="prm"><span>文字とみなす大きさ（紙面上）</span><span class="val" id="vText"></span>
+        <input type="range" id="pText" min="2" max="12" step="0.5" value="5">
+        <div class="ends"><span>小さい文字だけ</span><span>大きい文字も</span></div></div>
+      <div class="prm"><span>汚れ除去（点の大きさ）</span><span class="val" id="vNoise"></span>
+        <input type="range" id="pNoise" min="0.1" max="1.5" step="0.1" value="0.4"></div>
+      <label class="chkrow"><input type="checkbox" id="pExText" checked>文字を線として拾わない</label>
+      <label class="chkrow"><input type="checkbox" id="pDeskew" checked>傾きを自動補正する</label>
+      <label class="chkrow"><input type="checkbox" id="pSnap" checked>ほぼ水平・垂直の線をまっすぐ揃える</label>
+      <label class="chkrow"><input type="checkbox" id="pArcs" checked>円・円弧を認識する</label>
+      <label class="chkrow"><input type="checkbox" id="pShowText" checked>除外した文字の範囲を表示</label>
+      <button id="rasterRunBtn">線を認識する</button>
+      <div id="rasterStatus">未実行</div>
+    </div>
+
+    <div class="section" id="editBox" style="display:none;">
+      <h2>手修正</h2>
+      <div class="toolrow">
+        <button class="toolbtn" id="eraseBtn" style="flex:1;">線を消す</button>
+        <button class="toolbtn" id="drawBtn" style="flex:1;">線を描く</button>
+        <button class="toolbtn" id="undoBtn" disabled>元に戻す</button>
+      </div>
+      <div id="editStatus">「線を消す」：線をクリックで削除。「線を描く」：始点・終点を順にクリック（続けて描けます。Esc・右クリックで終了。Shiftで水平・垂直、近くの端点に吸着）。Ctrl／⌘+Zで元に戻せます。</div>
+    </div>
+
+    <div class="section">
+      <h2>線分グループ（色・線幅）</h2>
+      <div class="toolrow">
+        <button class="toolbtn" id="selAll">すべて含める</button>
+        <button class="toolbtn" id="selNone">すべて除外</button>
+      </div>
+      <div class="hint">クリックで含める／除外。行にカーソルを乗せると図面上でハイライトします。</div>
+    </div>
+    <div id="bucketList"></div>
+
+    <div class="section" id="textSection" style="display:none;">
+      <h2>埋め込みテキスト（本物の文字）</h2>
+      <div class="bucket" id="textBucketRow" style="cursor:pointer;">
+        <input type="checkbox" id="chkTextInclude">
+        <div class="bmeta">
+          <div class="label">検出された文字列</div>
+          <div class="sub" id="textCountSub"></div>
+        </div>
+      </div>
+      <div class="hint">PDF内部の正確な文字データをそのまま使うため、誤読みの心配がありません。</div>
+    </div>
+
+    <div class="section" id="calibBox" style="display:none;">
+      <h2>寸法・縮尺</h2>
+      <div class="scaleRow"><span>縮尺　1 :</span><input id="scaleDen" type="text" inputmode="decimal" placeholder="例: 100" autocomplete="off"></div>
+      <div class="hint" id="scaleDetected"></div>
+      <div class="hint" style="margin-top:12px;">縮尺の代わりに、図面上の既知の寸法で合わせることもできます（クリックは線の端点や円の中心に吸着します）。2点を選ぶと、今の縮尺での長さも表示されるので、寸法の確認にも使えます。</div>
+      <button class="toolbtn" id="calibStart" style="width:100%; margin-top:6px;">既知の寸法の2点をクリック</button>
+      <input id="calibLen" type="text" placeholder="実寸（mm）例: 1820">
+      <div class="toolrow" style="margin-top:6px;">
+        <button class="toolbtn" id="calibApply" style="flex:1;">この寸法で較正する</button>
+        <button class="toolbtn" id="calibClear" style="flex:none;">較正を解除</button>
+      </div>
+      <div id="calibStatus"></div>
+    </div>
+
+    <div class="section" id="ocrBox">
+      <h2>寸法数値のOCR（任意）</h2>
+      <div class="hint">図面上で範囲をドラッグ指定すると、その範囲だけをOCRします（推奨・高精度）。範囲を指定しない場合は、左のグループ一覧で「OCR」にチェックしたグループの周辺をOCRします。</div>
+      <div class="toolrow" style="margin-top:8px;">
+        <button class="toolbtn" id="rectModeBtn" style="flex:1;">範囲をドラッグ選択</button>
+        <button class="toolbtn" id="rectClearBtn">クリア</button>
+      </div>
+      <div id="rectHint" class="hint">指定範囲：0 件</div>
+      <button class="toolbtn" id="ocrRunBtn" style="width:100%; margin-top:10px;">OCR実行</button>
+      <div id="ocrStatus">未実行</div>
+      <div id="ocrList"></div>
+    </div>
+
+    <div class="section" style="margin-top:auto; border-bottom:none;">
+      <label style="font-size:12px; display:flex; align-items:center; gap:8px; margin-bottom:8px;"><input type="checkbox" id="chkClean" checked style="accent-color:var(--accent);"> 重複・細切れの線を整理する（推奨）</label>
+      <label style="font-size:12px; display:flex; align-items:center; gap:8px; margin-bottom:8px;">書き出し時の回転
+        <select id="exportRot" style="flex:1; font-size:12px; padding:4px 6px; border-radius:5px; border:1px solid var(--line);">
+          <option value="0">回転しない（画面の向きのまま）</option>
+          <option value="90">左に90°回転</option>
+          <option value="-90">右に90°回転</option>
+          <option value="180">180°回転</option>
+        </select>
+      </label>
+      <button id="exportBtn" disabled>DXFを書き出す</button>
+      <div class="hint" id="exportHint"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+// ===== RASTER CORE BEGIN =====
+// スキャン図面（ラスタ画像）→ 線分・円弧 変換コア。DOM非依存。
+const RasterCore = (() => {
+
+  function otsu(gray) {
+    const hist = new Float64Array(256);
+    for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+    const total = gray.length;
+    let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+    let sumB = 0, wB = 0, best = 0, thr = 128;
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t]; if (!wB) continue;
+      const wF = total - wB; if (!wF) break;
+      sumB += t * hist[t];
+      const mB = sumB / wB, mF = (sum - sumB) / wF;
+      const v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > best) { best = v; thr = t; }
+    }
+    return thr;
+  }
+
+  // 局所平均による適応二値化（ムラのあるスキャンに強い）
+  function binarize(gray, w, h, C, win) {
+    const r = win >> 1;
+    const hm = new Uint8Array(w * h), mean = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const o = y * w; let s = 0, n = 0;
+      for (let x = 0; x <= Math.min(r, w - 1); x++) { s += gray[o + x]; n++; }
+      for (let x = 0; x < w; x++) {
+        hm[o + x] = s / n;
+        const xa = x + r + 1, xr = x - r;
+        if (xa < w) { s += gray[o + xa]; n++; }
+        if (xr >= 0) { s -= gray[o + xr]; n--; }
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let s = 0, n = 0;
+      for (let y = 0; y <= Math.min(r, h - 1); y++) { s += hm[y * w + x]; n++; }
+      for (let y = 0; y < h; y++) {
+        mean[y * w + x] = s / n;
+        const ya = y + r + 1, yr = y - r;
+        if (ya < h) { s += hm[ya * w + x]; n++; }
+        if (yr >= 0) { s -= hm[yr * w + x]; n--; }
+      }
+    }
+    const T = Math.min(250, otsu(gray) + 20);
+    const bin = new Uint8Array(w * h);
+    for (let i = 0; i < bin.length; i++) {
+      const g = gray[i];
+      bin[i] = (g < mean[i] - C && g < T) || g < 60 ? 1 : 0;
+    }
+    return bin;
+  }
+
+  // 傾き推定（射影プロファイル法）。戻り値は度（y下向き座標系で時計回り正）
+  function estimateSkew(bin, w, h) {
+    let cnt = 0; for (let i = 0; i < bin.length; i++) cnt += bin[i];
+    if (cnt < 100) return 0;
+    const stride = Math.max(1, Math.floor(cnt / 300000));
+    const xs = [], ys = []; let k = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (bin[y * w + x] && (k++ % stride === 0)) { xs.push(x); ys.push(y); }
+    }
+    const n = xs.length, off = w, bins = new Int32Array(h + 2 * w + 4);
+    function score(deg) {
+      const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+      bins.fill(0);
+      for (let i = 0; i < n; i++) {
+        const v = Math.round(ys[i] * c - xs[i] * s) + off;
+        if (v >= 0 && v < bins.length) bins[v]++;
+      }
+      let sc = 0; for (let i = 0; i < bins.length; i++) sc += bins[i] * bins[i];
+      return sc;
+    }
+    let best = 0, bestS = -1;
+    for (let d = -5; d <= 5.0001; d += 0.2) { const s = score(d); if (s > bestS) { bestS = s; best = d; } }
+    const c0 = best;
+    for (let d = c0 - 0.2; d <= c0 + 0.2001; d += 0.02) { const s = score(d); if (s > bestS) { bestS = s; best = d; } }
+    return best;
+  }
+
+  function components(bin, w, h) {
+    const labels = new Int32Array(w * h);
+    let parent = new Int32Array(4096); let next = 1;
+    const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    const uni = (a, b) => { a = find(a); b = find(b); if (a !== b) { if (a < b) parent[b] = a; else parent[a] = b; } };
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x; if (!bin[i]) continue;
+        let l = 0;
+        const cand = [];
+        if (x > 0 && labels[i - 1]) cand.push(labels[i - 1]);
+        if (y > 0) {
+          const j = i - w;
+          if (labels[j]) cand.push(labels[j]);
+          if (x > 0 && labels[j - 1]) cand.push(labels[j - 1]);
+          if (x < w - 1 && labels[j + 1]) cand.push(labels[j + 1]);
+        }
+        if (!cand.length) {
+          if (next >= parent.length) { const p2 = new Int32Array(parent.length * 2); p2.set(parent); parent = p2; }
+          parent[next] = next; l = next++;
+        } else {
+          l = cand[0];
+          for (let c = 1; c < cand.length; c++) { if (cand[c] < l) l = cand[c]; }
+          for (let c = 0; c < cand.length; c++) uni(l, cand[c]);
+        }
+        labels[i] = l;
+      }
+    }
+    const minx = new Int32Array(next).fill(1e9), miny = new Int32Array(next).fill(1e9);
+    const maxx = new Int32Array(next).fill(-1), maxy = new Int32Array(next).fill(-1);
+    const area = new Int32Array(next);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x; if (!labels[i]) continue;
+      const r = find(labels[i]); labels[i] = r;
+      area[r]++;
+      if (x < minx[r]) minx[r] = x; if (x > maxx[r]) maxx[r] = x;
+      if (y < miny[r]) miny[r] = y; if (y > maxy[r]) maxy[r] = y;
+    }
+    return { labels, n: next, minx, miny, maxx, maxy, area };
+  }
+
+  // Zhang-Suen 細線化
+  function thin(img, w, h) {
+    for (let x = 0; x < w; x++) { img[x] = 0; img[(h - 1) * w + x] = 0; }
+    for (let y = 0; y < h; y++) { img[y * w] = 0; img[y * w + w - 1] = 0; }
+    let list = [];
+    for (let i = 0; i < img.length; i++) if (img[i]) list.push(i);
+    let changed = true; const rem = [];
+    while (changed) {
+      changed = false;
+      for (let sub = 0; sub < 2; sub++) {
+        rem.length = 0;
+        for (const i of list) {
+          if (!img[i]) continue;
+          const p2 = img[i - w], p3 = img[i - w + 1], p4 = img[i + 1], p5 = img[i + w + 1];
+          const p6 = img[i + w], p7 = img[i + w - 1], p8 = img[i - 1], p9 = img[i - w - 1];
+          const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+          if (B < 2 || B > 6) continue;
+          const A = (!p2 && p3) + (!p3 && p4) + (!p4 && p5) + (!p5 && p6) + (!p6 && p7) + (!p7 && p8) + (!p8 && p9) + (!p9 && p2);
+          if (A !== 1) continue;
+          if (sub === 0) { if (p2 * p4 * p6 || p4 * p6 * p8) continue; }
+          else { if (p2 * p4 * p8 || p2 * p6 * p8) continue; }
+          rem.push(i);
+        }
+        if (rem.length) { changed = true; for (const i of rem) img[i] = 0; }
+      }
+      list = list.filter(i => img[i]);
+    }
+    return list;
+  }
+
+  const DX = [0, 1, 1, 1, 0, -1, -1, -1], DY = [-1, -1, 0, 1, 1, 1, 0, -1];
+
+  // 階段状の冗長画素を除去（接続を保ったまま1画素幅に）
+  function pruneRedundant(img, w, list) {
+    const offs = DX.map((dx, k) => DY[k] * w + dx);
+    let removed = 0;
+    for (const i of list) {
+      if (!img[i]) continue;
+      const nb = [];
+      for (let k = 0; k < 8; k++) if (img[i + offs[k]]) nb.push(k);
+      if (nb.length < 2) { if (nb.length === 0) { img[i] = 0; removed++; } continue; }
+      // 近傍画素同士が p を介さずに連結しているか
+      const seen = new Array(nb.length).fill(false); seen[0] = true; const st = [0];
+      while (st.length) {
+        const a = st.pop();
+        for (let b = 0; b < nb.length; b++) {
+          if (seen[b]) continue;
+          const ka = nb[a], kb = nb[b];
+          if (Math.max(Math.abs(DX[ka] - DX[kb]), Math.abs(DY[ka] - DY[kb])) <= 1) { seen[b] = true; st.push(b); }
+        }
+      }
+      if (seen.every(Boolean)) { img[i] = 0; removed++; }
+    }
+    return removed;
+  }
+
+  function traceChains(img, w, list) {
+    const offs = DX.map((dx, k) => DY[k] * w + dx);
+    const deg = new Map();
+    const degOf = (i) => { let d = 0; for (let k = 0; k < 8; k++) if (img[i + offs[k]]) d++; return d; };
+    const live = list.filter(i => img[i]);
+    const isNode = new Uint8Array(img.length);
+    for (const i of live) { const d = degOf(i); deg.set(i, d); if (d !== 2) isNode[i] = 1; }
+    const visited = new Uint8Array(img.length);
+    const chains = [];
+    function walk(start, first) {
+      const ch = [start]; let prev = start, cur = first;
+      for (;;) {
+        ch.push(cur);
+        if (isNode[cur]) return { pts: ch, endNode: cur };
+        visited[cur] = 1;
+        let nxt = -1;
+        for (let k = 0; k < 8; k++) {
+          const j = cur + offs[k];
+          if (!img[j] || j === prev) continue;
+          if (j === start && ch.length <= 3) continue;
+          if (isNode[j]) { nxt = j; break; }
+          if (!visited[j] && nxt < 0) nxt = j;
+        }
+        if (nxt < 0) return { pts: ch, endNode: -1 };
+        prev = cur; cur = nxt;
+      }
+    }
+    for (const i of live) {
+      if (!isNode[i]) continue;
+      for (let k = 0; k < 8; k++) {
+        const j = i + offs[k];
+        if (!img[j] || isNode[j] || visited[j]) continue;
+        const r = walk(i, j);
+        chains.push({ idx: r.pts, a: deg.get(i), b: r.endNode >= 0 ? deg.get(r.endNode) : 1, closed: false });
+      }
+    }
+    for (const i of live) {
+      if (visited[i] || isNode[i] || !img[i]) continue;
+      visited[i] = 1;
+      let first = -1;
+      for (let k = 0; k < 8; k++) { const j = i + offs[k]; if (img[j] && !visited[j]) { first = j; break; } }
+      if (first < 0) continue;
+      const r = walk(i, first);
+      r.pts.push(i);
+      chains.push({ idx: r.pts, a: 2, b: 2, closed: true });
+    }
+    return chains.map(c => ({
+      pts: c.idx.map(i => [(i % w) + 0.5, Math.floor(i / w) + 0.5]),
+      a: c.a, b: c.b, closed: c.closed
+    }));
+  }
+
+  function dp(pts, eps) {
+    const n = pts.length; if (n < 3) return n === 2 ? [0, 1] : [0];
+    const keep = new Uint8Array(n); keep[0] = keep[n - 1] = 1;
+    const st = [[0, n - 1]];
+    while (st.length) {
+      const [a, b] = st.pop();
+      const [ax, ay] = pts[a], [bx, by] = pts[b];
+      const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy);
+      let md = -1, mi = -1;
+      for (let i = a + 1; i < b; i++) {
+        const d = L < 1e-9 ? Math.hypot(pts[i][0] - ax, pts[i][1] - ay)
+          : Math.abs(dy * (pts[i][0] - ax) - dx * (pts[i][1] - ay)) / L;
+        if (d > md) { md = d; mi = i; }
+      }
+      if (md > eps && mi > 0) { keep[mi] = 1; st.push([a, mi], [mi, b]); }
+    }
+    const out = []; for (let i = 0; i < n; i++) if (keep[i]) out.push(i);
+    return out;
+  }
+
+  function fitCircle(pts) {
+    const n = pts.length; let mx = 0, my = 0;
+    for (const p of pts) { mx += p[0]; my += p[1]; } mx /= n; my /= n;
+    let suu = 0, svv = 0, suv = 0, suuu = 0, svvv = 0, suvv = 0, svuu = 0;
+    for (const p of pts) {
+      const u = p[0] - mx, v = p[1] - my;
+      suu += u * u; svv += v * v; suv += u * v;
+      suuu += u * u * u; svvv += v * v * v; suvv += u * v * v; svuu += v * u * u;
+    }
+    const det = suu * svv - suv * suv; if (Math.abs(det) < 1e-9) return null;
+    const bu = 0.5 * (suuu + suvv), bv = 0.5 * (svvv + svuu);
+    const uc = (bu * svv - bv * suv) / det, vc = (svv * 0 + suu * bv - suv * bu) / det;
+    const cx = uc + mx, cy = vc + my;
+    const r = Math.sqrt(uc * uc + vc * vc + (suu + svv) / n);
+    return { cx, cy, r };
+  }
+
+  function tryArc(raw, tol, opt, closed) {
+    if (raw.length < 8) return null;
+    const c = fitCircle(raw); if (!c || !isFinite(c.r)) return null;
+    if (c.r < opt.minR || c.r > opt.maxR) return null;
+    let mxe = 0;
+    for (const p of raw) { const e = Math.abs(Math.hypot(p[0] - c.cx, p[1] - c.cy) - c.r); if (e > mxe) mxe = e; }
+    if (mxe > tol) return null;
+    let prev = Math.atan2(raw[0][1] - c.cy, raw[0][0] - c.cx); const t0 = prev; let sw = 0;
+    for (let i = 1; i < raw.length; i++) {
+      const t = Math.atan2(raw[i][1] - c.cy, raw[i][0] - c.cx);
+      let d = t - prev; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      sw += d; prev = t;
+    }
+    const swDeg = Math.abs(sw) * 180 / Math.PI;
+    if (swDeg < 25) return null;
+    const full = closed || swDeg > 345;
+    return { cx: c.cx, cy: c.cy, r: c.r, t0, sweep: sw, full };
+  }
+
+  function chainsToGeometry(chains, o) {
+    const segs = [], arcs = [];
+    for (const ch of chains) {
+      const pts = ch.pts;
+      if (o.arcs && ch.closed) {
+        const a = tryArc(pts, o.arcTol, o, true);
+        if (a) { arcs.push(a); continue; }
+      }
+      const vi = dp(pts, o.eps);
+      if (vi.length < 2) continue;
+      const splits = [0];
+      for (let k = 1; k < vi.length - 1; k++) {
+        const p0 = pts[vi[k - 1]], p1 = pts[vi[k]], p2 = pts[vi[k + 1]];
+        const a1 = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]), a2 = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
+        let d = Math.abs(a2 - a1); if (d > Math.PI) d = 2 * Math.PI - d;
+        if (d > 50 * Math.PI / 180) splits.push(k);
+      }
+      splits.push(vi.length - 1);
+      for (let s = 0; s < splits.length - 1; s++) {
+        const a = splits[s], b = splits[s + 1];
+        if (o.arcs && b - a >= 3) {
+          const arc = tryArc(pts.slice(vi[a], vi[b] + 1), o.arcTol, o, false);
+          if (arc) { arcs.push(arc); continue; }
+        }
+        for (let k = a; k < b; k++) {
+          const p = pts[vi[k]], q = pts[vi[k + 1]];
+          segs.push([p[0], p[1], q[0], q[1]]);
+        }
+      }
+    }
+    return { segs, arcs };
+  }
+
+  function mergeAxis(items, tol, gap) {
+    // items: {c, a0, a1}
+    items.sort((p, q) => p.c - q.c);
+    const out = []; let i = 0;
+    while (i < items.length) {
+      let j = i + 1;
+      while (j < items.length && items[j].c - items[j - 1].c <= tol) j++;
+      const cl = items.slice(i, j).sort((p, q) => p.a0 - q.a0);
+      let cur = null;
+      for (const it of cl) {
+        const L = it.a1 - it.a0;
+        if (cur && it.a0 <= cur.a1 + gap && Math.abs(it.c - cur.c) <= tol) {
+          cur.cw += it.c * L; cur.wt += L; cur.a1 = Math.max(cur.a1, it.a1);
+        } else {
+          if (cur) out.push(cur);
+          cur = { a0: it.a0, a1: it.a1, cw: it.c * L, wt: L };
+        }
+      }
+      if (cur) out.push(cur);
+      i = j;
+    }
+    return out.map(c => ({ c: c.wt > 0 ? c.cw / c.wt : 0, a0: c.a0, a1: c.a1 }));
+  }
+
+  function closeCorners(H, V, gap) {
+    const cell = Math.max(4, gap * 2);
+    const idx = new Map();
+    V.forEach((v, n) => { const k = Math.floor(v.c / cell); if (!idx.has(k)) idx.set(k, []); idx.get(k).push(n); });
+    for (const hs of H) {
+      for (const end of ['a0', 'a1']) {
+        const x = hs[end], y = hs.c; let best = -1, bd = gap + 1e-9;
+        const k = Math.floor(x / cell);
+        for (let kk = k - 1; kk <= k + 1; kk++) {
+          const l = idx.get(kk); if (!l) continue;
+          for (const n of l) {
+            const v = V[n];
+            if (y < v.a0 - gap || y > v.a1 + gap) continue;
+            const d = Math.abs(v.c - x);
+            // 反対側へ大きく突き抜けている場合（交差）は対象外
+            if (d <= bd) { bd = d; best = n; }
+          }
+        }
+        if (best >= 0) {
+          const v = V[best];
+          const other = end === 'a0' ? hs.a1 : hs.a0;
+          const nx = v.c;
+          if ((end === 'a0' && nx < other) || (end === 'a1' && nx > other)) hs[end] = nx;
+          if (y < v.a0) v.a0 = y; if (y > v.a1) v.a1 = y;
+        }
+      }
+    }
+  }
+
+  function mergeDiagonals(D, tol, gap) {
+    if (D.length > 3000) return D;
+    let list = D.map(s => s.slice());
+    let changed = true;
+    while (changed) {
+      changed = false;
+      outer:
+      for (let i = 0; i < list.length; i++) {
+        const a = list[i];
+        const adx = a[2] - a[0], ady = a[3] - a[1], aL = Math.hypot(adx, ady); if (aL < 1e-6) continue;
+        const ux = adx / aL, uy = ady / aL;
+        for (let j = i + 1; j < list.length; j++) {
+          const b = list[j];
+          const bdx = b[2] - b[0], bdy = b[3] - b[1], bL = Math.hypot(bdx, bdy); if (bL < 1e-6) continue;
+          const cross = Math.abs(ux * bdy - uy * bdx) / bL;
+          if (cross > Math.sin(3 * Math.PI / 180)) continue;
+          const d1 = Math.abs(-uy * (b[0] - a[0]) + ux * (b[1] - a[1]));
+          const d2 = Math.abs(-uy * (b[2] - a[0]) + ux * (b[3] - a[1]));
+          if (d1 > tol || d2 > tol) continue;
+          const t = [0, aL, ux * (b[0] - a[0]) + uy * (b[1] - a[1]), ux * (b[2] - a[0]) + uy * (b[3] - a[1])];
+          const bmin = Math.min(t[2], t[3]), bmax = Math.max(t[2], t[3]);
+          if (bmin > aL + gap || bmax < -gap) continue;
+          const lo = Math.min(0, bmin), hi = Math.max(aL, bmax);
+          const off = (d1 + d2) / 4 * Math.sign(-uy * (b[0] - a[0]) + ux * (b[1] - a[1]) || 1);
+          const ox = a[0] - uy * off, oy = a[1] + ux * off;
+          list[i] = [ox + ux * lo, oy + uy * lo, ox + ux * hi, oy + uy * hi];
+          list.splice(j, 1); changed = true; break outer;
+        }
+      }
+    }
+    return list;
+  }
+
+  function snapMerge(segs, o) {
+    const H = [], V = [], D = [];
+    const st = o.snapDeg;
+    for (const s of segs) {
+      const dx = s[2] - s[0], dy = s[3] - s[1], L = Math.hypot(dx, dy);
+      if (L < 1) continue;
+      let a = Math.atan2(dy, dx) * 180 / Math.PI; if (a < 0) a += 180; if (a >= 180) a -= 180;
+      if (o.snap && (a <= st || a >= 180 - st)) H.push({ c: (s[1] + s[3]) / 2, a0: Math.min(s[0], s[2]), a1: Math.max(s[0], s[2]) });
+      else if (o.snap && Math.abs(a - 90) <= st) V.push({ c: (s[0] + s[2]) / 2, a0: Math.min(s[1], s[3]), a1: Math.max(s[1], s[3]) });
+      else D.push(s);
+    }
+    const Hm = mergeAxis(H, o.tolY, o.gap), Vm = mergeAxis(V, o.tolY, o.gap);
+    closeCorners(Hm, Vm, o.gap);
+    closeCorners(Vm, Hm, o.gap);
+    const Dm = mergeDiagonals(D, o.tolY * 1.5, o.gap);
+    const out = [];
+    for (const h of Hm) if (h.a1 - h.a0 >= o.minSeg) out.push([h.a0, h.c, h.a1, h.c]);
+    for (const v of Vm) if (v.a1 - v.a0 >= o.minSeg) out.push([v.c, v.a0, v.c, v.a1]);
+    for (const d of Dm) if (Math.hypot(d[2] - d[0], d[3] - d[1]) >= o.minSeg) out.push(d);
+    return out;
+  }
+
+  // メイン：gray(Uint8, 0-255) → 線分・円弧（画像ピクセル座標, y下向き）
+  async function vectorize(gray, w, h, p, onProgress) {
+    const tick = async (msg) => { if (onProgress) await onProgress(msg); };
+    const ppmm = p.pxPerMm;
+    await tick('二値化中…');
+    const C = [22, 16, 11, 7, 4][(p.sensitivity || 3) - 1];
+    const win = Math.max(15, Math.round(ppmm * 4)) | 1;
+    const bin = binarize(gray, w, h, C, win);
+
+    await tick('文字・汚れを判別中…');
+    const cc = components(bin, w, h);
+    const noiseArea = Math.max(2, Math.pow(p.noiseMm * ppmm, 2) * 0.6);
+    const textMax = p.textMm * ppmm;
+    const cls = new Uint8Array(cc.n); // 0=noise 1=text 2=keep
+    const textBoxes = [];
+    let nNoise = 0, nText = 0;
+    for (let r = 1; r < cc.n; r++) {
+      if (!cc.area[r]) continue;
+      const bw = cc.maxx[r] - cc.minx[r] + 1, bh = cc.maxy[r] - cc.miny[r] + 1;
+      const mx = Math.max(bw, bh), mn = Math.min(bw, bh);
+      if (cc.area[r] < noiseArea && mx < ppmm * 1.2) { cls[r] = 0; nNoise++; continue; }
+      if (p.excludeText && mx <= textMax && !(mx / mn >= 8 && mx >= textMax * 0.5)) {
+        cls[r] = 1; nText++; textBoxes.push([cc.minx[r], cc.miny[r], cc.maxx[r] + 1, cc.maxy[r] + 1]);
+        continue;
+      }
+      cls[r] = 2;
+    }
+    let black = 0;
+    const img = bin; // 再利用
+    for (let i = 0; i < img.length; i++) {
+      if (!img[i]) continue;
+      if (cls[cc.labels[i]] === 2) { img[i] = 1; black++; } else img[i] = 0;
+    }
+    cc.labels = null;
+
+    await tick('細線化中…');
+    let list = thin(img, w, h);
+    pruneRedundant(img, w, list);
+    pruneRedundant(img, w, list);
+    list = list.filter(i => img[i]);
+    const strokeW = list.length ? black / list.length : 1;
+
+    await tick('線をたどっています…');
+    let chains = traceChains(img, w, list);
+    const spur = Math.max(4, strokeW * 2.5);
+    const minChain = Math.max(4, ppmm * 0.8);
+    chains = chains.filter(c => {
+      const L = c.pts.length;
+      if (c.closed) return L >= minChain;
+      const ends = (c.a === 1) + (c.b === 1);
+      if (ends === 1 && L < spur) return false;
+      if (ends === 2 && L < minChain) return false;
+      return L >= 3;
+    });
+
+    await tick('直線・円弧に置き換え中…');
+    const lv = (p.smooth || 2) - 1;
+    const eps = Math.max(1.0, strokeW * 0.6) + ppmm * [0.1, 0.2, 0.35, 0.6, 1.0][lv];
+    const geo = chainsToGeometry(chains, {
+      eps, arcs: p.arcs, arcTol: Math.max(eps, strokeW) * 1.2,
+      minR: ppmm * 0.8, maxR: Math.max(w, h) * 0.6
+    });
+    await tick('途切れた線をつないでいます…');
+    const segs = snapMerge(geo.segs, {
+      snap: p.snap, snapDeg: [1, 1.5, 2.5, 3.5, 5][lv],
+      tolY: Math.max(1.5, strokeW * 0.8, ppmm * 0.2),
+      gap: ppmm * [0.6, 0.8, 1.0, 1.4, 2.0][lv],
+      minSeg: Math.max(2, ppmm * 0.4)
+    });
+    return {
+      segments: segs, arcs: geo.arcs, textBoxes,
+      stats: { strokeW, nNoise, nText, chains: chains.length }
+    };
+  }
+
+  return { vectorize, estimateSkew, binarize, otsu };
+})();
+// ===== RASTER CORE END =====
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const fileInput = document.getElementById('fileInput');
+const pageSel = document.getElementById('pageSel');
+const statusEl = document.getElementById('status');
+const emptyEl = document.getElementById('empty');
+const stageEl = document.getElementById('canvasStage');
+const baseCanvas = document.getElementById('baseCanvas');
+const overlayCanvas = document.getElementById('overlayCanvas');
+const bucketListEl = document.getElementById('bucketList');
+const exportBtn = document.getElementById('exportBtn');
+const exportHint = document.getElementById('exportHint');
+const calibBox = document.getElementById('calibBox');
+const calibStatus = document.getElementById('calibStatus');
+const ocrBox = document.getElementById('ocrBox');
+const ocrRunBtn = document.getElementById('ocrRunBtn');
+const ocrStatus = document.getElementById('ocrStatus');
+const ocrListEl = document.getElementById('ocrList');
+const rectModeBtn = document.getElementById('rectModeBtn');
+const rectClearBtn = document.getElementById('rectClearBtn');
+const rectHint = document.getElementById('rectHint');
+
+let pdfDoc = null;
+let currentFileName = 'drawing';
+let buckets = [];        // {key, color:[r,g,b], width, strokeCount, segCount, segments:[[x1,y1,x2,y2],...]}
+let selected = new Set();
+let ocrAnchors = new Set();   // bucket indices flagged as "dimension line" anchors for OCR
+let ocrResults = [];          // {text, page:[x,y], heightPage, confidence, include}
+let ocrRects = [];            // user-drawn OCR regions, in canvas-px space [x0,y0,x1,y1]
+let rectSelectMode = false;
+let textItems = [];           // real embedded-font text items: {text,x,y,angle,height} in page space
+let includeText = false;
+let rectDragStart = null;
+let rectDragCurrent = null;
+let pageHeight = 0, pageWidth = 0, renderScale = 1;
+let scaleFactor = null;  // mm per pdf-unit, once calibrated
+let calibMode = false;
+let calibPoints = [];
+let currentPage = null;
+let origBaseCanvas = null;   // 回転前の表示用画像
+let skewDeg = 0;             // 適用中の傾き補正（度）
+let rasterTextBoxes = [];    // 除外した文字範囲（PDF座標）[x0,y0,x1,y1]
+let editMode = null;         // 'erase' | 'draw' | null
+let drawStart = null, drawHover = null, eraseHover = null;
+let undoStack = [];
+
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  await openPdfFile(file);
+});
+
+const canvasWrap = document.getElementById('canvasWrap');
+['dragenter','dragover'].forEach(evt => {
+  canvasWrap.addEventListener(evt, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    canvasWrap.classList.add('dragover');
+  });
+});
+['dragleave','drop'].forEach(evt => {
+  canvasWrap.addEventListener(evt, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    canvasWrap.classList.remove('dragover');
+  });
+});
+canvasWrap.addEventListener('drop', async (e) => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    statusEl.textContent = 'PDFファイルをドロップしてください';
+    return;
+  }
+  await openPdfFile(file);
+});
+
+async function openPdfFile(file) {
+  statusEl.textContent = '読み込み中…';
+  const buf = await file.arrayBuffer();
+  pdfDoc = await pdfjsLib.getDocument({
+    data: buf,
+    // 日本語フォント（CID）の文字を読むためのデータ。縮尺表記・文字の読み取りに使う
+    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
+  }).promise;
+
+  if (pdfDoc.numPages > 1) {
+    pageSel.style.display = '';
+    pageSel.innerHTML = '';
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = 'ページ ' + i;
+      pageSel.appendChild(o);
+    }
+  } else {
+    pageSel.style.display = 'none';
+  }
+  currentFileName = file.name;
+  await loadPage(1);
+}
+
+pageSel.addEventListener('change', () => loadPage(parseInt(pageSel.value, 10)));
+
+async function loadPage(pageNum) {
+  statusEl.textContent = '解析中…';
+  exportBtn.disabled = true;
+  selected = new Set();
+  scaleFactor = null;
+  calibPoints = [];
+  ocrAnchors = new Set();
+  ocrResults = [];
+  ocrRects = [];
+  rectSelectMode = false;
+  rectDragStart = null;
+  ocrStatus.textContent = '未実行';
+  ocrListEl.innerHTML = '';
+  if (rectHint) rectHint.textContent = '指定範囲：0 件';
+  textItems = [];
+  includeText = false;
+  document.getElementById('textSection').style.display = 'none';
+  document.getElementById('chkTextInclude').checked = false;
+
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 1.6 });
+  // 画面表示と同じ向き（PDFのページ回転設定を反映）の座標系で扱う
+  const vp1 = page.getViewport({ scale: 1 });
+  pageWidth = vp1.width;
+  pageHeight = vp1.height;
+  renderScale = viewport.scale;
+
+  baseCanvas.width = overlayCanvas.width = viewport.width;
+  baseCanvas.height = overlayCanvas.height = viewport.height;
+  stageEl.style.width = baseCanvas.width + 'px';
+  stageEl.style.height = baseCanvas.height + 'px';
+
+  const baseCtx = baseCanvas.getContext('2d');
+  await page.render({ canvasContext: baseCtx, viewport }).promise;
+  currentPage = page;
+  origBaseCanvas = document.createElement('canvas');
+  origBaseCanvas.width = baseCanvas.width; origBaseCanvas.height = baseCanvas.height;
+  origBaseCanvas.getContext('2d').drawImage(baseCanvas, 0, 0);
+  skewDeg = 0; rasterTextBoxes = []; undoStack = []; setEditMode(null); updateUndo();
+  document.getElementById('rasterStatus').textContent = '未実行';
+
+  buckets = await extractBuckets(page);
+  toDisplayFrame(vp1);
+  buildBucketList();
+  drawOverlay();
+
+  textItems = await extractTextItems(page);
+  textItems = textItems.map(it => {
+    const p = vpPoint(vp1, it.x, it.y);
+    const t = it.angle * Math.PI / 180, m = vp1.transform;
+    const dx = m[0] * Math.cos(t) + m[2] * Math.sin(t), dy = -(m[1] * Math.cos(t) + m[3] * Math.sin(t));
+    return { ...it, x: p[0], y: p[1], angle: Math.atan2(dy, dx) * 180 / Math.PI };
+  });
+  buildTextSection();
+  detectScale();
+  updateScaleStatus();
+
+  emptyEl.style.display = 'none';
+  stageEl.style.display = '';
+  calibBox.style.display = '';
+  ocrBox.style.display = 'block';
+  document.getElementById('rasterBox').style.display = '';
+  document.getElementById('editBox').style.display = '';
+  const totalSeg = buckets.reduce((s,b)=>s+b.segments.length,0);
+  const looksScan = totalSeg < 60;
+  document.getElementById('rasterBox').classList.toggle('suggest', looksScan);
+  statusEl.textContent = looksScan
+    ? 'ベクター線がほとんどありません（スキャン図面の可能性）→ 右の「線を認識する」を実行してください'
+    : buckets.length + ' 個のグループを検出（合計 ' + totalSeg + ' セグメント）';
+}
+
+// PDF内部座標 → 表示向きの座標（原点左下・y上向き、ページ回転を適用）
+function vpPoint(vp, x, y) {
+  const m = vp.transform;
+  return [m[0] * x + m[2] * y + m[4], vp.height - (m[1] * x + m[3] * y + m[5])];
+}
+function toDisplayFrame(vp) {
+  const m = vp.transform;
+  const det = -(m[0] * m[3] - m[1] * m[2]);
+  const flip = det < 0 ? -1 : 1, k = Math.sqrt(Math.abs(det));
+  const deg = (r) => ((r * 180 / Math.PI) % 360 + 360) % 360;
+  for (const b of buckets) {
+    b.segments = b.segments.map(([x1, y1, x2, y2]) => {
+      const p = vpPoint(vp, x1, y1), q = vpPoint(vp, x2, y2);
+      return [p[0], p[1], q[0], q[1]];
+    });
+    if (b.points) b.points = b.points.map(([x, y]) => vpPoint(vp, x, y));
+    if (b.arcRaw) {
+      b.arcs = b.arcRaw.map((a) => {
+        const c = vpPoint(vp, a.cx, a.cy);
+        const s = vpPoint(vp, a.cx + a.r * Math.cos(a.start), a.cy + a.r * Math.sin(a.start));
+        const st = Math.atan2(s[1] - c[1], s[0] - c[0]);
+        const sw = a.sweep * flip;
+        const full = Math.abs(a.sweep) >= Math.PI * 2 - 0.01;
+        const a0 = sw >= 0 ? st : st + sw, a1 = sw >= 0 ? st + sw : st;
+        return { cx: c[0], cy: c[1], r: a.r * k, a0: deg(a0), a1: deg(a1), full, vec: true };
+      });
+      delete b.arcRaw;
+    }
+  }
+}
+
+// ---------- vector path extraction ----------
+
+function mat_mul(m1, m2) {
+  return [
+    m1[0]*m2[0] + m1[1]*m2[2],
+    m1[0]*m2[1] + m1[1]*m2[3],
+    m1[2]*m2[0] + m1[3]*m2[2],
+    m1[2]*m2[1] + m1[3]*m2[3],
+    m1[4]*m2[0] + m1[5]*m2[2] + m2[4],
+    m1[4]*m2[1] + m1[5]*m2[3] + m2[5]
+  ];
+}
+function apply(m, x, y) {
+  return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]];
+}
+function flattenCubic(p0, p1, p2, p3, n) {
+  const pts = [];
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, mt = 1 - t;
+    const a = mt*mt*mt, b = 3*mt*mt*t, c = 3*mt*t*t, d = t*t*t;
+    pts.push([
+      a*p0[0] + b*p1[0] + c*p2[0] + d*p3[0],
+      a*p0[1] + b*p1[1] + c*p2[1] + d*p3[1]
+    ]);
+  }
+  return pts;
+}
+function bezPt(p0, p1, p2, p3, t) {
+  const mt = 1 - t, a = mt*mt*mt, b = 3*mt*mt*t, c = 3*mt*t*t, d = t*t*t;
+  return [a*p0[0] + b*p1[0] + c*p2[0] + d*p3[0], a*p0[1] + b*p1[1] + c*p2[1] + d*p3[1]];
+}
+// 3次ベジェが円弧なら {cx,cy,r,start,sweep}（ラジアン、sweepは符号付き）を返す
+function bezierArc(p0, p1, p2, p3) {
+  const t0x = p1[0] - p0[0], t0y = p1[1] - p0[1], t1x = p3[0] - p2[0], t1y = p3[1] - p2[1];
+  const l0 = Math.hypot(t0x, t0y), l1 = Math.hypot(t1x, t1y);
+  const chord = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]);
+  if (l0 < 1e-6 || l1 < 1e-6 || chord < 1e-4) return null;
+  // 始点・終点での法線の交点 = 中心
+  const n0x = -t0y, n0y = t0x, n1x = -t1y, n1y = t1x;
+  const D = n0x * (-n1y) - n0y * (-n1x);
+  if (Math.abs(D) < 1e-12 * l0 * l1) return null;
+  const bx = p3[0] - p0[0], by = p3[1] - p0[1];
+  const s = (bx * (-n1y) - by * (-n1x)) / D;
+  const cx = p0[0] + s * n0x, cy = p0[1] + s * n0y;
+  const r = Math.hypot(p0[0] - cx, p0[1] - cy);
+  if (!(r > 1e-4) || r > 1e6) return null;
+  const tol = Math.max(r * 0.002, 0.003);
+  if (Math.abs(Math.hypot(p3[0] - cx, p3[1] - cy) - r) > tol) return null;
+  for (const t of [0.25, 0.5, 0.75]) {
+    const q = bezPt(p0, p1, p2, p3, t);
+    if (Math.abs(Math.hypot(q[0] - cx, q[1] - cy) - r) > tol) return null;
+  }
+  const start = Math.atan2(p0[1] - cy, p0[0] - cx), end = Math.atan2(p3[1] - cy, p3[0] - cx);
+  const ccw = ((p0[0] - cx) * t0y - (p0[1] - cy) * t0x) > 0;
+  let sweep = end - start;
+  if (ccw) { while (sweep <= 0) sweep += Math.PI * 2; } else { while (sweep >= 0) sweep -= Math.PI * 2; }
+  if (Math.abs(sweep) > Math.PI * 1.01) return null;   // 1本のベジェは半円以下
+  return { cx, cy, r, start, sweep };
+}
+function mat_inv(m) {
+  const d = m[0] * m[3] - m[1] * m[2];
+  if (!d) return null;
+  return [m[3] / d, -m[1] / d, -m[2] / d, m[0] / d, (m[2] * m[5] - m[3] * m[4]) / d, (m[1] * m[4] - m[0] * m[5]) / d];
+}
+// 線分を多角形（偶奇規則）の内側だけに切り取る
+function clipSegToPolys(p, q, polys, out) {
+  const ts = [0, 1];
+  const dx = q[0] - p[0], dy = q[1] - p[1];
+  for (const poly of polys) {
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const a = poly[i], b = poly[(i + 1) % n];
+      const ex = b[0] - a[0], ey = b[1] - a[1];
+      const den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-12) continue;
+      const t = ((a[0] - p[0]) * ey - (a[1] - p[1]) * ex) / den;
+      const u = ((a[0] - p[0]) * dy - (a[1] - p[1]) * dx) / den;
+      if (t > 0 && t < 1 && u >= 0 && u <= 1) ts.push(t);
+    }
+  }
+  ts.sort((x, y) => x - y);
+  const inside = (x, y) => {
+    let c = false;
+    for (const poly of polys) for (let i = 0, n = poly.length, j = n - 1; i < n; j = i++) {
+      const a = poly[i], b = poly[j];
+      if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+    }
+    return c;
+  };
+  for (let k = 0; k < ts.length - 1; k++) {
+    const t0 = ts[k], t1 = ts[k + 1];
+    if (t1 - t0 < 1e-9) continue;
+    const tm = (t0 + t1) / 2;
+    if (inside(p[0] + dx * tm, p[1] + dy * tm)) out.push([p[0] + dx * t0, p[1] + dy * t0, p[0] + dx * t1, p[1] + dy * t1]);
+  }
+}
+// タイリングパターン（断熱材などの模様）を線に展開する
+function expandTilingPattern(P, polys, OPS) {
+  const color = P[1], ops = P[2], matrix = P[3] || [1, 0, 0, 1, 0, 0], xs = Math.abs(P[5]), ys = Math.abs(P[6]);
+  if (!ops || !ops.fnArray || !(xs > 0) || !(ys > 0) || !polys.length) return [];
+  const M = Array.from(matrix), Mi = mat_inv(M);
+  if (!Mi) return [];
+  const base = (color && color.length >= 3 && typeof color[0] === 'number') ? normColor(color) : [0, 0, 0];
+  // 1単位分の線（パターン空間）
+  const cell = [];
+  let pc = [1, 0, 0, 1, 0, 0], sc = base, lw = 1;
+  const st = [];
+  let paths = [];
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const f = ops.fnArray[i], a = ops.argsArray[i];
+    if (f === OPS.save) st.push([pc, sc, lw]);
+    else if (f === OPS.restore) { const s = st.pop(); if (s) [pc, sc, lw] = s; }
+    else if (f === OPS.transform) pc = mat_mul(a, pc);
+    else if (f === OPS.setLineWidth) lw = a[0];
+    else if (f === OPS.setStrokeRGBColor) sc = normColor(a);
+    else if (f === OPS.setStrokeGray) sc = normColor([a[0], a[0], a[0]]);
+    else if (f === OPS.constructPath) {
+      const so = a[0], nm = a[1]; let p = 0, cur = null, start = null, cx = 0, cy = 0;
+      for (const o of so) {
+        if (o === OPS.moveTo) { cx = nm[p++]; cy = nm[p++]; cur = [apply(pc, cx, cy)]; start = cur[0]; paths.push(cur); }
+        else if (o === OPS.lineTo) { cx = nm[p++]; cy = nm[p++]; if (cur) cur.push(apply(pc, cx, cy)); }
+        else if (o === OPS.curveTo) {
+          const P1 = apply(pc, nm[p], nm[p + 1]), P2 = apply(pc, nm[p + 2], nm[p + 3]), P3 = apply(pc, nm[p + 4], nm[p + 5]);
+          if (cur) for (const q of flattenCubic(apply(pc, cx, cy), P1, P2, P3, 8)) cur.push(q);
+          cx = nm[p + 4]; cy = nm[p + 5]; p += 6;
+        }
+        else if (o === OPS.rectangle) {
+          const x = nm[p++], y = nm[p++], w = nm[p++], h = nm[p++];
+          cur = [apply(pc, x, y), apply(pc, x + w, y), apply(pc, x + w, y + h), apply(pc, x, y + h), apply(pc, x, y)]; paths.push(cur);
+        }
+        else if (o === OPS.closePath) { if (cur && start) cur.push(start); }
+      }
+    }
+    else if (f === OPS.stroke || f === OPS.closeStroke || f === OPS.fillStroke || f === OPS.eoFillStroke) {
+      const scale = Math.sqrt(Math.abs(pc[0] * pc[3] - pc[1] * pc[2]));
+      for (const pts of paths) for (let k = 0; k < pts.length - 1; k++) cell.push({ s: [pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]], c: sc, w: lw * scale });
+      paths = [];
+    }
+    else if (f === OPS.endPath || f === OPS.fill || f === OPS.eoFill) paths = [];
+  }
+  if (!cell.length) return [];
+  // 塗り範囲を覆うタイルの範囲
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const poly of polys) for (const [x, y] of poly) {
+    const q = apply(Mi, x, y);
+    x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+  }
+  let cx0 = Infinity, cy0 = Infinity, cx1 = -Infinity, cy1 = -Infinity;
+  for (const c of cell) { cx0 = Math.min(cx0, c.s[0], c.s[2]); cy0 = Math.min(cy0, c.s[1], c.s[3]); cx1 = Math.max(cx1, c.s[0], c.s[2]); cy1 = Math.max(cy1, c.s[1], c.s[3]); }
+  const i0 = Math.floor((x0 - cx1) / xs), i1 = Math.ceil((x1 - cx0) / xs);
+  const j0 = Math.floor((y0 - cy1) / ys), j1 = Math.ceil((y1 - cy0) / ys);
+  if ((i1 - i0 + 1) * (j1 - j0 + 1) > 60000) return [];   // 極端に細かい模様は展開しない
+  const det = Math.sqrt(Math.abs(M[0] * M[3] - M[1] * M[2]));
+  const out = [];
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+    const ox = i * xs, oy = j * ys;
+    for (const c of cell) {
+      const p = apply(M, c.s[0] + ox, c.s[1] + oy), q = apply(M, c.s[2] + ox, c.s[3] + oy);
+      const segs = [];
+      clipSegToPolys(p, q, polys, segs);
+      for (const sg of segs) out.push({ s: sg, c: c.c, w: c.w * det });
+    }
+  }
+  return out;
+}
+function normColor(v) {
+  const c = [v[0], v[1], v[2]].map(Number);
+  return c.some(x => x > 1) ? c.map(x => x / 255) : c;
+}
+
+async function extractBuckets(page) {
+  const opList = await page.getOperatorList();
+  const OPS = pdfjsLib.OPS;
+  const fn = opList.fnArray, args = opList.argsArray;
+
+  let ctm = [1,0,0,1,0,0];
+  let strokeColor = [0,0,0];
+  let fillColor = [0,0,0];
+  let lineWidth = 1;
+  let fillPattern = null;   // 模様塗り（TilingPattern）
+  const stack = [];
+
+  const map = new Map();
+  let curX = 0, curY = 0, startX = 0, startY = 0;
+  let subpaths = [];   // completed subpaths
+  let subpath = [];    // entries: [x,y] point, or {arc, p:[x,y]} (arc ending at p)
+
+  const ptOf = (e) => Array.isArray(e) ? e : e.p;
+  function endSubpath() {
+    if (subpath.length) subpaths.push(subpath);
+    subpath = [];
+  }
+  function startSubpath(pt) {
+    endSubpath();
+    subpath = [pt];
+  }
+  function addCurve(p0, p1, p2, p3) {
+    const arc = bezierArc(p0, p1, p2, p3);
+    if (arc) { if (!subpath.length) subpath.push(p0); subpath.push({ arc, p: p3 }); return; }
+    // 制御点が一直線上なら、ただの直線
+    const cl = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]);
+    if (cl > 1e-6) {
+      const dev = (q) => Math.abs((q[0] - p0[0]) * (p3[1] - p0[1]) - (q[1] - p0[1]) * (p3[0] - p0[0])) / cl;
+      const inside = (q) => { const t = ((q[0] - p0[0]) * (p3[0] - p0[0]) + (q[1] - p0[1]) * (p3[1] - p0[1])) / (cl * cl); return t > -0.01 && t < 1.01; };
+      if (dev(p1) < 0.002 && dev(p2) < 0.002 && inside(p1) && inside(p2)) { subpath.push(p3); return; }
+    }
+    const L = Math.hypot(p1[0]-p0[0], p1[1]-p0[1]) + Math.hypot(p2[0]-p1[0], p2[1]-p1[1]) + Math.hypot(p3[0]-p2[0], p3[1]-p2[1]);
+    const n = Math.max(2, Math.min(64, Math.ceil(L / 1.5)));
+    for (const p of flattenCubic(p0, p1, p2, p3, n)) subpath.push(p);
+  }
+  function emit(b, closeFill) {
+    if (!b.arcRaw) b.arcRaw = [];
+    if (!b.points) b.points = [];
+    for (const sp of subpaths) {
+      const n = sp.length;
+      let lastArc = null;
+      if (n === 1 && Array.isArray(sp[0])) continue;
+      for (let i = 1; i < n; i++) {
+        const prev = ptOf(sp[i-1]), e = sp[i];
+        if (Array.isArray(e)) {
+          lastArc = null;
+          if (prev[0] === e[0] && prev[1] === e[1]) continue; // 長さ0の線（点）は取り込まない
+          b.segments.push([prev[0], prev[1], e[0], e[1]]);
+        } else {
+          const a = e.arc;
+          // 同じ円の続きなら1つの円弧にまとめる
+          if (lastArc && Math.abs(lastArc.cx - a.cx) < 0.01 && Math.abs(lastArc.cy - a.cy) < 0.01 &&
+              Math.abs(lastArc.r - a.r) < 0.01 && Math.sign(lastArc.sweep) === Math.sign(a.sweep) &&
+              Math.abs(lastArc.sweep + a.sweep) <= Math.PI * 2 + 0.01) {
+            lastArc.sweep += a.sweep;
+            if (Math.abs(lastArc.sweep) > Math.PI * 2 - 0.01) lastArc.sweep = Math.sign(lastArc.sweep) * Math.PI * 2;
+          } else {
+            lastArc = { cx: a.cx, cy: a.cy, r: a.r, start: a.start, sweep: a.sweep };
+            b.arcRaw.push(lastArc);
+          }
+        }
+      }
+      if (closeFill && n > 1) {
+        const first = ptOf(sp[0]), last = ptOf(sp[n-1]);
+        if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 1e-6) b.segments.push([last[0], last[1], first[0], first[1]]);
+      }
+    }
+    b.strokeCount++;
+  }
+  function flushPath(doStroke, doFill) {
+    endSubpath();
+    if (subpaths.length) {
+      if (doStroke) {
+        const w = lineWidth * Math.sqrt(Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]));  // 実際の線幅（pt）
+        const key = 'S|' + strokeColor.map(c=>c.toFixed(2)).join(',') + '|' + (w * 25.4 / 72).toFixed(2);
+        let b = map.get(key);
+        if (!b) { b = { key, kind:'stroke', color: strokeColor.slice(), width: w, strokeCount: 0, segments: [] }; map.set(key, b); }
+        emit(b, false);
+      }
+      if (doFill && fillPattern) {
+        // 模様は、塗り範囲の中に線として展開する（範囲の輪郭は描かない）
+        const polys = [];
+        for (const sp of subpaths) {
+          const poly = [];
+          for (const e of sp) {
+            if (Array.isArray(e)) { poly.push(e); continue; }
+            const a = e.arc;
+            for (let k = 1; k <= 12; k++) { const t = a.start + a.sweep * k / 12; poly.push([a.cx + a.r * Math.cos(t), a.cy + a.r * Math.sin(t)]); }
+          }
+          if (poly.length >= 3) polys.push(poly);
+        }
+        for (const h of expandTilingPattern(fillPattern, polys, OPS)) {
+          const key = 'H|' + h.c.map(c=>c.toFixed(2)).join(',') + '|' + (h.w * 25.4 / 72).toFixed(2);
+          let b = map.get(key);
+          if (!b) { b = { key, kind:'stroke', hatch: true, color: h.c.slice(), width: h.w, strokeCount: 0, segments: [], arcRaw: [], points: [] }; map.set(key, b); }
+          b.segments.push(h.s);
+          b.strokeCount++;
+        }
+      } else if (doFill) {
+        const key = 'F|' + fillColor.map(c=>c.toFixed(2)).join(',');
+        let b = map.get(key);
+        if (!b) { b = { key, kind:'fill', color: fillColor.slice(), width: 0, strokeCount: 0, segments: [] }; map.set(key, b); }
+        emit(b, true);
+      }
+    }
+    subpaths = [];
+    subpath = [];
+  }
+
+  for (let i = 0; i < fn.length; i++) {
+    const op = fn[i], a = args[i];
+    switch (op) {
+      case OPS.save:
+        stack.push({ ctm: ctm.slice(), strokeColor: strokeColor.slice(), fillColor: fillColor.slice(), lineWidth, fillPattern });
+        break;
+      case OPS.restore: {
+        const s = stack.pop();
+        if (s) { ctm = s.ctm; strokeColor = s.strokeColor; fillColor = s.fillColor; lineWidth = s.lineWidth; fillPattern = s.fillPattern; }
+        break;
+      }
+      case OPS.paintFormXObjectBegin:
+        stack.push({ ctm: ctm.slice(), strokeColor: strokeColor.slice(), fillColor: fillColor.slice(), lineWidth, fillPattern });
+        if (a && Array.isArray(a[0]) && a[0].length === 6) ctm = mat_mul(a[0], ctm);
+        else if (a && a[0] && a[0].length === 6) ctm = mat_mul(Array.from(a[0]), ctm);
+        break;
+      case OPS.paintFormXObjectEnd: {
+        const s = stack.pop();
+        if (s) { ctm = s.ctm; strokeColor = s.strokeColor; fillColor = s.fillColor; lineWidth = s.lineWidth; fillPattern = s.fillPattern; }
+        break;
+      }
+      case OPS.transform:
+        ctm = mat_mul(a, ctm);
+        break;
+      case OPS.setLineWidth:
+        lineWidth = a[0];
+        break;
+      case OPS.setStrokeRGBColor:
+        strokeColor = normColor(a);
+        break;
+      case OPS.setStrokeGray:
+        strokeColor = normColor([a[0], a[0], a[0]]);
+        break;
+      case OPS.setStrokeColor:
+      case OPS.setStrokeColorN:
+        strokeColor = a.length >= 3 && typeof a[0] === 'number' ? normColor(a) : [0,0,0];
+        break;
+      case OPS.setFillRGBColor:
+        fillColor = normColor(a); fillPattern = null;
+        break;
+      case OPS.setFillGray:
+        fillColor = normColor([a[0], a[0], a[0]]); fillPattern = null;
+        break;
+      case OPS.setFillColor:
+      case OPS.setFillColorN:
+        if (a && a[0] === 'TilingPattern') { fillPattern = a; break; }
+        fillPattern = null;
+        fillColor = a.length >= 3 && typeof a[0] === 'number' ? normColor(a) : [0,0,0];
+        break;
+      case OPS.moveTo: {
+        const p = apply(ctm, a[0], a[1]);
+        startSubpath(p);
+        curX = a[0]; curY = a[1]; startX = a[0]; startY = a[1];
+        break;
+      }
+      case OPS.lineTo: {
+        const p = apply(ctm, a[0], a[1]);
+        subpath.push(p);
+        curX = a[0]; curY = a[1];
+        break;
+      }
+      case OPS.curveTo: {
+        addCurve(apply(ctm, curX, curY), apply(ctm, a[0], a[1]), apply(ctm, a[2], a[3]), apply(ctm, a[4], a[5]));
+        curX = a[4]; curY = a[5];
+        break;
+      }
+      case OPS.closePath: {
+        const p = apply(ctm, startX, startY);
+        subpath.push(p);
+        curX = startX; curY = startY;
+        break;
+      }
+      case OPS.constructPath: {
+        const subOps = a[0], nums = a[1];
+        let p = 0;
+        for (const so of subOps) {
+          if (so === OPS.moveTo) {
+            const x = nums[p++], y = nums[p++];
+            startSubpath(apply(ctm, x, y));
+            curX = x; curY = y; startX = x; startY = y;
+          } else if (so === OPS.lineTo) {
+            const x = nums[p++], y = nums[p++];
+            subpath.push(apply(ctm, x, y));
+            curX = x; curY = y;
+          } else if (so === OPS.curveTo) {
+            const x1=nums[p++],y1=nums[p++],x2=nums[p++],y2=nums[p++],x3=nums[p++],y3=nums[p++];
+            addCurve(apply(ctm, curX, curY), apply(ctm, x1, y1), apply(ctm, x2, y2), apply(ctm, x3, y3));
+            curX = x3; curY = y3;
+          } else if (so === OPS.curveTo2) {   // v: 第1制御点 = 現在点
+            const x2=nums[p++],y2=nums[p++],x3=nums[p++],y3=nums[p++];
+            addCurve(apply(ctm, curX, curY), apply(ctm, curX, curY), apply(ctm, x2, y2), apply(ctm, x3, y3));
+            curX = x3; curY = y3;
+          } else if (so === OPS.curveTo3) {   // y: 第2制御点 = 終点
+            const x1=nums[p++],y1=nums[p++],x3=nums[p++],y3=nums[p++];
+            addCurve(apply(ctm, curX, curY), apply(ctm, x1, y1), apply(ctm, x3, y3), apply(ctm, x3, y3));
+            curX = x3; curY = y3;
+          } else if (so === OPS.rectangle) {
+            const x=nums[p++],y=nums[p++],w=nums[p++],h=nums[p++];
+            startSubpath(apply(ctm,x,y));
+            subpath.push(apply(ctm,x+w,y));
+            subpath.push(apply(ctm,x+w,y+h));
+            subpath.push(apply(ctm,x,y+h));
+            subpath.push(apply(ctm,x,y));
+            curX = x; curY = y; startX = x; startY = y;
+          } else if (so === OPS.closePath) {
+            subpath.push(apply(ctm, startX, startY));
+            curX = startX; curY = startY;
+          }
+        }
+        break;
+      }
+      case OPS.stroke:
+      case OPS.closeStroke:
+        if (op === OPS.closeStroke) {
+          subpath.push(apply(ctm, startX, startY));
+        }
+        flushPath(true, false);
+        break;
+      case OPS.fill:
+      case OPS.eoFill:
+        flushPath(false, true);
+        break;
+      case OPS.fillStroke:
+      case OPS.eoFillStroke:
+        flushPath(true, true);
+        break;
+      case OPS.closeFillStroke:
+      case OPS.closeEOFillStroke:
+        subpath.push(apply(ctm, startX, startY));
+        flushPath(true, true);
+        break;
+      case OPS.endPath:
+      case OPS.clip:
+      case OPS.eoClip:
+        subpaths = []; subpath = [];
+        break;
+      default:
+        break;
+    }
+  }
+
+  const list = Array.from(map.values());
+  list.sort((x,y) => y.strokeCount - x.strokeCount);
+  return list;
+}
+
+// ---------- 書き出し前の線の整理（重複削除・同一直線上の連結） ----------
+function cleanSegments(segs) {
+  const EPS = 0.004;               // pt（約0.0014mm）
+  const out = [], seen = new Set();
+  const groups = new Map();
+  for (const s of segs) {
+    let [x1, y1, x2, y2] = s;
+    const L = Math.hypot(x2 - x1, y2 - y1);
+    if (L < 1e-6) continue;
+    let ang = Math.atan2(y2 - y1, x2 - x1);
+    if (ang < 0) ang += Math.PI;
+    if (ang >= Math.PI - 1e-9) ang -= Math.PI;
+    const ux = Math.cos(ang), uy = Math.sin(ang);
+    const off = -x1 * uy + y1 * ux;
+    const ka = Math.round(ang * 2e4), ko = Math.round(off / 0.01);
+    const key = ka + '|' + ko;
+    let g = groups.get(key);
+    if (!g) { g = { ux, uy, off, iv: [] }; groups.set(key, g); }
+    const t1 = x1 * ux + y1 * uy, t2 = x2 * ux + y2 * uy;
+    g.iv.push(t1 < t2 ? [t1, t2, s] : [t2, t1, s]);
+  }
+  for (const g of groups.values()) {
+    g.iv.sort((a, b) => a[0] - b[0]);
+    let cur = null;
+    const push = () => {
+      if (!cur) return;
+      if (cur.n === 1) { out.push(cur.s); return; }
+      // 連結した線は、元の端点の座標をそのまま使う（直線への投影で座標を作り直さない）
+      out.push([cur.p0[0], cur.p0[1], cur.p1[0], cur.p1[1]]);
+    };
+    for (const [a, b, s] of g.iv) {
+      const pa = (s[0] * g.ux + s[1] * g.uy) <= (s[2] * g.ux + s[3] * g.uy) ? [s[0], s[1]] : [s[2], s[3]];
+      const pb = pa[0] === s[0] && pa[1] === s[1] ? [s[2], s[3]] : [s[0], s[1]];
+      if (cur && a <= cur.b + EPS) {
+        if (b > cur.b) { cur.b = b; cur.p1 = pb; }
+        cur.n++;
+      } else {
+        push();
+        cur = { a, b, p0: pa, p1: pb, s, n: 1 };
+      }
+    }
+    push();
+  }
+  return out;
+}
+function cleanArcs(arcs) {
+  const out = [], seen = new Set();
+  for (const a of arcs) {
+    const k = [a.cx, a.cy, a.r].map(v => Math.round(v / 0.005)).join(',') + '|' + (a.full ? 'F' : Math.round(a.a0 * 100) + ',' + Math.round(a.a1 * 100));
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(a);
+  }
+  return out;
+}
+function cleanPoints(pts) {
+  const out = [], seen = new Set();
+  for (const p of pts) {
+    const k = Math.round(p[0] / 0.005) + ',' + Math.round(p[1] / 0.005);
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(p);
+  }
+  return out;
+}
+// ---------- embedded (real font) text extraction ----------
+
+let lastTextExtractError = null;
+
+async function extractTextItems(page) {
+  lastTextExtractError = null;
+  let tc;
+  try {
+    tc = await page.getTextContent();
+  } catch (e) {
+    console.error('getTextContent failed:', e);
+    lastTextExtractError = e && e.message ? e.message : String(e);
+    return [];
+  }
+  const items = [];
+  try {
+    for (const it of tc.items) {
+      const str = (it.str || '').trim();
+      if (!str) continue;
+      const t = it.transform;
+      const x = t[4], y = t[5];
+      const angle = Math.atan2(t[1], t[0]) * 180 / Math.PI;
+      const height = Math.hypot(t[2], t[3]) || Math.hypot(t[0], t[1]) || 10;
+      items.push({ text: str, x, y, angle, height, width: it.width || 0 });
+    }
+  } catch (e) {
+    console.error('text item processing failed:', e);
+    lastTextExtractError = e && e.message ? e.message : String(e);
+  }
+  return items;
+}
+
+function buildTextSection() {
+  const sec = document.getElementById('textSection');
+  const sub = document.getElementById('textCountSub');
+  const cb = document.getElementById('chkTextInclude');
+  sec.style.display = '';
+  includeText = false;
+  cb.checked = false;
+  cb.disabled = false;
+  if (lastTextExtractError) {
+    sub.textContent = '抽出に失敗しました：' + lastTextExtractError;
+    cb.disabled = true;
+    return;
+  }
+  if (!textItems.length) {
+    sub.textContent = 'このページには埋め込みテキストが見つかりませんでした（文字はすべて図形として描かれています）';
+    cb.disabled = true;
+    return;
+  }
+  sub.textContent = textItems.length + ' 個の文字列';
+  cb.onchange = () => { includeText = cb.checked; updateExportState(); drawOverlay(); };
+}
+document.getElementById('textBucketRow').addEventListener('mouseenter', () => drawOverlay(undefined, true));
+document.getElementById('textBucketRow').addEventListener('mouseleave', () => drawOverlay());
+
+// ---------- UI ----------
+
+function colorCss(c) {
+  return `rgb(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)})`;
+}
+
+function buildBucketList() {
+  bucketListEl.innerHTML = '';
+  buckets.forEach((b, idx) => {
+    const row = document.createElement('div');
+    row.className = 'bucket';
+    const labelText = b.label ? b.label : (b.kind === 'fill'
+      ? `${colorLabel(b.color)}・塗りつぶし`
+      : `${colorLabel(b.color)}・${b.hatch ? '模様（ハッチング）・' : ''}線幅 ${(b.width * 25.4 / 72).toFixed(2)}mm`);
+    const countLabel = b.kind === 'fill' ? '個' : '本';
+    const subText = b.label ? bucketSub(b) : `${b.strokeCount} ${countLabel} / 直線 ${b.segments.length}` +
+      ((b.arcs && b.arcs.length) ? ` / 円・円弧 ${b.arcs.length}` : '') + ((b.points && b.points.length) ? ` / 点 ${b.points.length}` : '');
+    row.innerHTML = `
+      <input type="checkbox" class="chk-include" data-idx="${idx}">
+      <span class="swatch" style="background:${colorCss(b.color)}"></span>
+      <div class="bmeta">
+        <div class="label">${labelText}</div>
+        <div class="sub">${subText}</div>
+      </div>
+      <div class="ocrlbl">OCR<input type="checkbox" class="chk-ocr" data-idx="${idx}"></div>`;
+    const cb = row.querySelector('.chk-include');
+    cb.checked = selected.has(idx);
+    row.querySelector('.chk-ocr').checked = ocrAnchors.has(idx);
+    cb.addEventListener('change', () => {
+      if (cb.checked) selected.add(idx); else selected.delete(idx);
+      updateExportState();
+      drawOverlay();
+    });
+    const ocrCb = row.querySelector('.chk-ocr');
+    ocrCb.addEventListener('change', () => {
+      if (ocrCb.checked) ocrAnchors.add(idx); else ocrAnchors.delete(idx);
+    });
+    row.addEventListener('mouseenter', () => drawOverlay(idx));
+    row.addEventListener('mouseleave', () => drawOverlay());
+    bucketListEl.appendChild(row);
+  });
+}
+
+function colorLabel(c) {
+  const [r,g,b] = c;
+  if (r>0.9 && g>0.9 && b>0.9) return '白';
+  if (r<0.1 && g<0.1 && b<0.1) return '黒';
+  if (r>0.6 && g<0.2 && b>0.3) return 'マゼンタ系';
+  if (b>0.7 && g<0.3 && r<0.3) return '青';
+  if (b>0.7 && g>0.3 && r<0.3) return '水色系';
+  if (g>0.4 && r<0.2 && b<0.2) return '緑';
+  if (r>0.7 && g<0.2 && b<0.2) return '赤';
+  return `RGB(${r.toFixed(2)},${g.toFixed(2)},${b.toFixed(2)})`;
+}
+
+document.getElementById('selAll').addEventListener('click', () => {
+  selected = new Set(buckets.map((_,i)=>i));
+  bucketListEl.querySelectorAll('.chk-include').forEach(cb => cb.checked = true);
+  updateExportState(); drawOverlay();
+});
+document.getElementById('selNone').addEventListener('click', () => {
+  selected = new Set();
+  bucketListEl.querySelectorAll('.chk-include').forEach(cb => cb.checked = false);
+  updateExportState(); drawOverlay();
+});
+
+function bucketSub(b) {
+  const parts = [];
+  if (b.segments.length) parts.push(`直線 ${b.segments.length} 本`);
+  if (b.arcs && b.arcs.length) parts.push(`円・円弧 ${b.arcs.length} 個`);
+  return parts.length ? parts.join(' / ') : '0 本';
+}
+
+// バケットを差し替え（選択状態はキーで引き継ぐ）
+function replaceBuckets(removeFn, additions, autoSelect) {
+  const selKeys = new Set([...selected].map(i => buckets[i] && buckets[i].key));
+  const ocrKeys = new Set([...ocrAnchors].map(i => buckets[i] && buckets[i].key));
+  buckets = buckets.filter(b => !removeFn(b)).concat(additions);
+  if (autoSelect) additions.forEach(b => selKeys.add(b.key));
+  selected = new Set(); ocrAnchors = new Set();
+  buckets.forEach((b, i) => { if (selKeys.has(b.key)) selected.add(i); if (ocrKeys.has(b.key)) ocrAnchors.add(i); });
+  buildBucketList(); updateExportState(); drawOverlay();
+}
+
+function updateExportState() {
+  const segs = Array.from(selected).reduce((s,i)=>s+buckets[i].segments.length+((buckets[i].arcs||[]).length)+((buckets[i].points||[]).length),0);
+  const ocrCount = ocrResults.filter(r => r.include).length;
+  const textCount = includeText ? textItems.length : 0;
+  exportBtn.disabled = (selected.size === 0 && ocrCount === 0 && textCount === 0);
+  const parts = [];
+  if (selected.size) parts.push(`${selected.size} グループ / ${segs} セグメント`);
+  if (ocrCount) parts.push(`OCR数値 ${ocrCount} 個`);
+  if (textCount) parts.push(`埋め込みテキスト ${textCount} 個`);
+  exportHint.textContent = parts.length ? parts.join(' + ') + ' を書き出します' : '含めるグループを選んでください';
+}
+
+function pdfToCanvas(x, y) {
+  // page space (origin bottom-left, y-up) -> canvas pixel space (origin top-left, y-down)
+  return [x * renderScale, overlayCanvas.height - y * renderScale];
+}
+function canvasToPdf(px, py) {
+  return [px / renderScale, (overlayCanvas.height - py) / renderScale];
+}
+
+function drawOverlay(hoverIdx, hoverText) {
+  const ctx = overlayCanvas.getContext('2d');
+  ctx.clearRect(0,0,overlayCanvas.width, overlayCanvas.height);
+
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(217,140,43,0.95)';
+  selected.forEach(idx => {
+    if (idx === hoverIdx) return;
+    drawBucket(ctx, buckets[idx]);
+  });
+  if (hoverIdx !== undefined) {
+    ctx.strokeStyle = 'rgba(79,209,232,0.95)';
+    ctx.lineWidth = 2;
+    drawBucket(ctx, buckets[hoverIdx]);
+  }
+  if (includeText || hoverText) drawTextMarkers(ctx, hoverText);
+  drawRasterTextBoxes(ctx);
+  drawEditMarkers(ctx);
+  drawOcrMarkers(ctx);
+  drawOcrRects(ctx);
+  drawCalibMarkers(ctx);
+}
+
+function drawTextMarkers(ctx, emphasize) {
+  ctx.fillStyle = emphasize ? 'rgba(79,209,232,0.95)' : 'rgba(79,209,232,0.75)';
+  const r = emphasize ? 3 : 2;
+  textItems.forEach(it => {
+    const p = pdfToCanvas(it.x, it.y);
+    ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+function drawOcrRects(ctx) {
+  ctx.strokeStyle = 'rgba(79,209,232,0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5,4]);
+  ocrRects.forEach(([x0,y0,x1,y1]) => {
+    ctx.strokeRect(x0, y0, x1-x0, y1-y0);
+  });
+  if (rectDragStart && rectDragCurrent) {
+    const [sx,sy] = rectDragStart, [cx,cy] = rectDragCurrent;
+    ctx.strokeStyle = 'rgba(217,140,43,0.95)';
+    ctx.strokeRect(Math.min(sx,cx), Math.min(sy,cy), Math.abs(cx-sx), Math.abs(cy-sy));
+  }
+  ctx.setLineDash([]);
+}
+
+function drawOcrMarkers(ctx) {
+  ctx.font = '11px ui-monospace, Menlo, Consolas, monospace';
+  ocrResults.forEach(r => {
+    if (!r.include) return;
+    const p = pdfToCanvas(r.page[0], r.page[1]);
+    ctx.strokeStyle = 'rgba(79,209,232,0.9)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(p[0]-2, p[1]-2, 4, 4);
+    ctx.fillStyle = 'rgba(79,209,232,0.95)';
+    ctx.fillText(r.text, p[0]+5, p[1]-4);
+  });
+}
+
+function drawBucket(ctx, b) {
+  ctx.beginPath();
+  for (const [x1,y1,x2,y2] of b.segments) {
+    const p1 = pdfToCanvas(x1,y1), p2 = pdfToCanvas(x2,y2);
+    ctx.moveTo(p1[0], p1[1]);
+    ctx.lineTo(p2[0], p2[1]);
+  }
+  ctx.stroke();
+  if (b.arcs) for (const a of b.arcs) drawArc(ctx, a);
+  if (b.points && b.points.length) {
+    const fs = ctx.fillStyle; ctx.fillStyle = ctx.strokeStyle;
+    for (const [x, y] of b.points) { const p = pdfToCanvas(x, y); ctx.fillRect(p[0] - 1, p[1] - 1, 2, 2); }
+    ctx.fillStyle = fs;
+  }
+}
+function drawArc(ctx, a) {
+  const c = pdfToCanvas(a.cx, a.cy);
+  ctx.beginPath();
+  if (a.full) ctx.arc(c[0], c[1], a.r * renderScale, 0, Math.PI * 2);
+  else ctx.arc(c[0], c[1], a.r * renderScale, -a.a0 * Math.PI / 180, -a.a1 * Math.PI / 180, true);
+  ctx.stroke();
+}
+function drawRasterTextBoxes(ctx) {
+  if (!rasterTextBoxes.length || !document.getElementById('pShowText').checked) return;
+  ctx.fillStyle = 'rgba(79,209,232,0.16)';
+  ctx.strokeStyle = 'rgba(79,209,232,0.55)'; ctx.lineWidth = 1;
+  for (const [x0,y0,x1,y1] of rasterTextBoxes) {
+    const p = pdfToCanvas(x0, y1), q = pdfToCanvas(x1, y0);
+    ctx.fillRect(p[0], p[1], q[0]-p[0], q[1]-p[1]);
+    ctx.strokeRect(p[0], p[1], q[0]-p[0], q[1]-p[1]);
+  }
+}
+
+// ---------- calibration ----------
+
+document.getElementById('calibStart').addEventListener('click', () => {
+  calibMode = true;
+  setEditMode(null);
+  calibPoints = [];
+  calibStatus.textContent = '図面上で寸法の始点をクリックしてください';
+});
+
+overlayCanvas.addEventListener('click', (e) => {
+  if (rectSelectMode || editMode) return;
+  if (!calibMode) return;
+  const rect = overlayCanvas.getBoundingClientRect();
+  let cp = [e.clientX - rect.left, e.clientY - rect.top];
+  const sn = calibSnap(cp);
+  if (sn) cp = sn;
+  calibPoints.push(cp);
+  if (calibPoints.length === 1) {
+    calibStatus.textContent = '終点をクリックしてください' + (sn ? '（始点は線の端点に吸着しました）' : '');
+  } else if (calibPoints.length === 2) {
+    calibMode = false;
+    const [p1, p2] = calibPoints;
+    const len = Math.hypot(p2[0]-p1[0], p2[1]-p1[1]) / renderScale * currentScale();
+    calibStatus.textContent = `2点間の長さ：${fmtMm(len)} mm（今の設定）。図面の寸法と違う場合は、実寸を入れて「較正する」を押してください。`;
+  }
+  drawOverlay();
+});
+
+// ---------- OCR region rectangle selection ----------
+
+rectModeBtn.addEventListener('click', () => {
+  rectSelectMode = !rectSelectMode;
+  rectModeBtn.classList.toggle('active', rectSelectMode);
+  rectModeBtn.textContent = rectSelectMode ? '選択中…（ドラッグで範囲指定）' : '範囲をドラッグ選択';
+  overlayCanvas.classList.toggle('rectmode', rectSelectMode);
+  if (rectSelectMode) { calibMode = false; setEditMode(null); }
+});
+
+rectClearBtn.addEventListener('click', () => {
+  ocrRects = [];
+  updateRectHint();
+  drawOverlay();
+});
+
+function updateRectHint() {
+  rectHint.textContent = ocrRects.length
+    ? `指定範囲：${ocrRects.length} 件（この範囲だけをOCRします）`
+    : '指定範囲：0 件';
+}
+
+overlayCanvas.addEventListener('mousedown', (e) => {
+  if (!rectSelectMode) return;
+  const rect = overlayCanvas.getBoundingClientRect();
+  rectDragStart = [e.clientX - rect.left, e.clientY - rect.top];
+  rectDragCurrent = rectDragStart;
+});
+overlayCanvas.addEventListener('mousemove', (e) => {
+  if (!rectSelectMode || !rectDragStart) return;
+  const rect = overlayCanvas.getBoundingClientRect();
+  rectDragCurrent = [e.clientX - rect.left, e.clientY - rect.top];
+  drawOverlay();
+});
+window.addEventListener('mouseup', () => {
+  if (!rectSelectMode || !rectDragStart || !rectDragCurrent) { rectDragStart = null; return; }
+  const [sx,sy] = rectDragStart, [cx,cy] = rectDragCurrent;
+  const x0 = Math.min(sx,cx), y0 = Math.min(sy,cy), x1 = Math.max(sx,cx), y1 = Math.max(sy,cy);
+  if (x1 - x0 > 8 && y1 - y0 > 8) {
+    ocrRects.push([x0,y0,x1,y1]);
+    updateRectHint();
+  }
+  rectDragStart = null; rectDragCurrent = null;
+  drawOverlay();
+});
+
+function drawCalibMarkers(ctx) {
+  if (!calibPoints.length) return;
+  ctx.fillStyle = '#4fd1e8';
+  calibPoints.forEach(p => {
+    ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, Math.PI*2); ctx.fill();
+  });
+  if (calibPoints.length === 2) {
+    ctx.strokeStyle = '#4fd1e8'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(calibPoints[0][0], calibPoints[0][1]);
+    ctx.lineTo(calibPoints[1][0], calibPoints[1][1]);
+    ctx.stroke();
+  }
+}
+
+document.getElementById('calibApply').addEventListener('click', () => {
+  const len = parseFloat(document.getElementById('calibLen').value);
+  if (calibPoints.length !== 2 || !len || len <= 0) {
+    calibStatus.textContent = '先に2点をクリックし、実寸を入力してください';
+    return;
+  }
+  const [p1,p2] = calibPoints;
+  const pxDist = Math.hypot(p2[0]-p1[0], p2[1]-p1[1]);
+  const pdfDist = pxDist / renderScale;
+  scaleFactor = len / pdfDist; // mm per pdf-unit
+  updateScaleStatus();
+  drawOverlay();
+});
+document.getElementById('calibClear').addEventListener('click', () => {
+  scaleFactor = null; calibPoints = []; calibMode = false;
+  updateScaleStatus(); drawOverlay();
+});
+const scaleDenEl = document.getElementById('scaleDen');
+scaleDenEl.addEventListener('input', () => { scaleFactor = null; updateScaleStatus(); });
+function scaleDen() {
+  const v = parseFloat(String(scaleDenEl.value).normalize('NFKC').replace(/[^0-9.]/g, ''));
+  return v > 0 ? v : 0;
+}
+// mm per pdf-unit（較正 > 縮尺 > 未設定）
+function currentScale() {
+  if (scaleFactor) return scaleFactor;
+  const d = scaleDen();
+  return d ? 25.4 / 72 * d : 1;
+}
+function fmtMm(v) { return v.toLocaleString('ja-JP', { maximumFractionDigits: 1 }); }
+function updateScaleStatus() {
+  if (scaleFactor) {
+    const den = scaleFactor / (25.4 / 72);
+    calibStatus.textContent = `較正済み：1pt = ${scaleFactor.toFixed(4)} mm（縮尺 約1:${den.toFixed(1)}）で書き出します。縮尺の欄は使いません。`;
+  } else if (scaleDen()) {
+    calibStatus.textContent = `縮尺1:${scaleDen()}の実寸（mm）で書き出します。`;
+  } else {
+    calibStatus.textContent = '縮尺が未設定です。PDFのポイント単位で書き出すため、実寸になりません。';
+  }
+}
+function calibSnap(cp) {
+  let best = null, bd = 10;
+  // bonus: 小さな円の中心（寸法端部の○など）は、近くの細かい線の端点より優先する
+  const test = (x, y, bonus) => { const p = pdfToCanvas(x, y), d = Math.hypot(cp[0] - p[0], cp[1] - p[1]) - (bonus || 0); if (d < bd) { bd = d; best = p; } };
+  for (const b of buckets) {
+    for (const sg of b.segments) { test(sg[0], sg[1]); test(sg[2], sg[3]); }
+    for (const a of (b.arcs || [])) {
+      test(a.cx, a.cy, a.full && a.r * renderScale < 12 ? 4 : 0);
+      if (a.full) continue;
+      test(a.cx + a.r * Math.cos(a.a0 * Math.PI / 180), a.cy + a.r * Math.sin(a.a0 * Math.PI / 180));
+      test(a.cx + a.r * Math.cos(a.a1 * Math.PI / 180), a.cy + a.r * Math.sin(a.a1 * Math.PI / 180));
+    }
+  }
+  return best;
+}
+// 図面枠などの「1:100」「S=1/50」から縮尺を読み取る
+function detectScale() {
+  const el = document.getElementById('scaleDetected');
+  const cands = [], labels = [];
+  for (const it of textItems) {
+    const t = String(it.text || '').normalize('NFKC').replace(/\s+/g, '');
+    let m = t.match(/^(?:S=?)?1[:\/](\d{1,4}(?:\.\d+)?)$/i);
+    // 「縮尺 S=1:100」「SCALE 1/50」のように1つの文字列にまとまっている場合
+    if (!m && /縮尺|スケール|scale|S=/i.test(t)) m = t.match(/(?:^|[^\d.\/:])1[:\/](\d{1,4}(?:\.\d+)?)(?![\d\/:])/);
+    if (m && +m[1] > 1) cands.push({ den: +m[1], x: it.x, y: it.y });
+    if (/^(scale|縮尺|スケール|S=?)$/i.test(t)) labels.push(it);
+  }
+  if (!cands.length) {
+    el.textContent = '図面から縮尺を読み取れませんでした。図面の縮尺を入力してください。';
+    return;
+  }
+  let pick;
+  if (labels.length) {
+    let bd = Infinity;
+    for (const c of cands) for (const l of labels) { const d = Math.hypot(c.x - l.x, c.y - l.y); if (d < bd) { bd = d; pick = c; } }
+  } else {
+    const cnt = new Map();
+    for (const c of cands) cnt.set(c.den, (cnt.get(c.den) || 0) + 1);
+    const top = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    pick = cands.find(c => c.den === top);
+  }
+  scaleDenEl.value = String(pick.den);
+  const others = [...new Set(cands.map(c => c.den))].filter(d => d !== pick.den);
+  el.textContent = `図面から読み取り：1:${pick.den}` + (others.length
+    ? `（ほかに ${others.map(d => '1:' + d).join('、')} の表記があります。部分的に縮尺が違う図の場合は書き換えてください）`
+    : '');
+}
+
+// ---------- OCR (dimension values) ----------
+
+let tesseractWorker = null;
+
+function mergeRects(rects) {
+  // iteratively merge overlapping/touching axis-aligned rects [x0,y0,x1,y1]
+  let merged = rects.slice();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    outer:
+    for (let i = 0; i < merged.length; i++) {
+      for (let j = i + 1; j < merged.length; j++) {
+        const a = merged[i], b = merged[j];
+        if (a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]) {
+          merged[i] = [Math.min(a[0],b[0]), Math.min(a[1],b[1]), Math.max(a[2],b[2]), Math.max(a[3],b[3])];
+          merged.splice(j, 1);
+          changed = true;
+          break outer;
+        }
+      }
+    }
+  }
+  return merged;
+}
+
+ocrRunBtn.addEventListener('click', runOcr);
+
+async function runOcr() {
+  const useRects = ocrRects.length > 0;
+  if (!useRects && ocrAnchors.size === 0) {
+    ocrStatus.textContent = '図面上で範囲をドラッグ指定するか、左のグループ一覧でOCR対象にチェックを入れてください';
+    return;
+  }
+  if (typeof Tesseract === 'undefined') {
+    ocrStatus.textContent = 'このプレビュー環境ではOCRエンジンを読み込めませんでした。ダウンロードしたHTMLファイルをブラウザで直接開いて実行してください。';
+    return;
+  }
+
+  ocrRunBtn.disabled = true;
+  ocrStatus.textContent = 'OCRエンジンを準備中…';
+
+  try {
+    if (!tesseractWorker) {
+      tesseractWorker = await Tesseract.createWorker('eng');
+      await tesseractWorker.setParameters({
+        tessedit_char_whitelist: '0123456789.,',
+        tessedit_pageseg_mode: '11'
+      });
+    }
+
+    let rects;
+    if (useRects) {
+      rects = mergeRects(ocrRects.map(r => r.slice()));
+    } else {
+      // margin around each anchor segment (canvas px), perpendicular slack for the digits
+      const margin = 22;
+      rects = [];
+      ocrAnchors.forEach(idx => {
+        for (const [x1,y1,x2,y2] of buckets[idx].segments) {
+          const p1 = pdfToCanvas(x1,y1), p2 = pdfToCanvas(x2,y2);
+          rects.push([
+            Math.min(p1[0],p2[0]) - margin, Math.min(p1[1],p2[1]) - margin,
+            Math.max(p1[0],p2[0]) + margin, Math.max(p1[1],p2[1]) + margin
+          ]);
+        }
+      });
+      rects = mergeRects(rects);
+    }
+
+    ocrStatus.textContent = `${rects.length} 箇所を認識中…`;
+    ocrResults = [];
+    let done = 0;
+
+    for (const [x0,y0,x1,y1] of rects) {
+      const cx0 = Math.max(0, Math.floor(x0)), cy0 = Math.max(0, Math.floor(y0));
+      const cx1 = Math.min(overlayCanvas.width, Math.ceil(x1)), cy1 = Math.min(overlayCanvas.height, Math.ceil(y1));
+      const w = cx1 - cx0, h = cy1 - cy0;
+      if (w < 6 || h < 6) continue;
+
+      const crop = document.createElement('canvas');
+      // upscale small crops for better OCR accuracy
+      const upscale = Math.max(1, Math.min(3, Math.round(200 / Math.max(w,h))));
+      crop.width = w * upscale; crop.height = h * upscale;
+      const cctx = crop.getContext('2d');
+      cctx.imageSmoothingEnabled = false;
+      cctx.drawImage(baseCanvas, cx0, cy0, w, h, 0, 0, crop.width, crop.height);
+
+      const { data } = await tesseractWorker.recognize(crop);
+      done++;
+      ocrStatus.textContent = `認識中… (${done}/${rects.length})`;
+
+      const words = (data.words || []);
+      for (const wd of words) {
+        const txt = (wd.text || '').trim();
+        if (!/^[0-9]{1,6}([.,][0-9]{1,3})?$/.test(txt)) continue;
+        const bx0 = cx0 + wd.bbox.x0 / upscale, bx1 = cx0 + wd.bbox.x1 / upscale;
+        const by0 = cy0 + wd.bbox.y0 / upscale, by1 = cy0 + wd.bbox.y1 / upscale;
+        const cxp = (bx0 + bx1) / 2, cyp = by1; // baseline-ish anchor (bottom of bbox)
+        const p = canvasToPdf(cxp, cyp);
+        const hPage = (by1 - by0) / renderScale;
+        ocrResults.push({
+          text: txt,
+          page: p,
+          heightPage: hPage,
+          confidence: wd.confidence,
+          include: wd.confidence >= 60
+        });
+      }
+    }
+
+    ocrStatus.textContent = `${ocrResults.length} 個の数値を検出しました。内容を確認してください。`;
+    buildOcrList();
+    updateExportState();
+    drawOverlay();
+  } catch (err) {
+    ocrStatus.textContent = 'OCRの実行に失敗しました：' + err.message + '（ダウンロードしたHTMLファイルをブラウザで直接開いて再度お試しください）';
+  } finally {
+    ocrRunBtn.disabled = false;
+  }
+}
+
+function buildOcrList() {
+  ocrListEl.innerHTML = '';
+  ocrResults.forEach((r, idx) => {
+    const row = document.createElement('div');
+    row.className = 'ocrRow';
+    row.innerHTML = `
+      <input type="checkbox" ${r.include ? 'checked' : ''}>
+      <input type="text" value="${r.text}">
+      <span class="conf">${Math.round(r.confidence)}%</span>`;
+    const cb = row.querySelector('input[type=checkbox]');
+    const txt = row.querySelector('input[type=text]');
+    cb.addEventListener('change', () => { r.include = cb.checked; updateExportState(); drawOverlay(); });
+    txt.addEventListener('input', () => { r.text = txt.value; drawOverlay(); });
+    row.addEventListener('mouseenter', () => highlightOcr(idx));
+    row.addEventListener('mouseleave', () => drawOverlay());
+    ocrListEl.appendChild(row);
+  });
+}
+
+function highlightOcr(idx) {
+  drawOverlay();
+  const ctx = overlayCanvas.getContext('2d');
+  const r = ocrResults[idx];
+  const p = pdfToCanvas(r.page[0], r.page[1]);
+  ctx.strokeStyle = '#d98c2b'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(p[0], p[1], 7, 0, Math.PI*2); ctx.stroke();
+}
+
+// ---------- DXF export ----------
+
+// CADで表示できない互換文字（部首用の漢字・縦書き用記号など）を通常の文字に直す
+const CJK_FIX = { '⻑': '長', '⻄': '西', '⻘': '青', '⻝': '食', '⻤': '鬼', '⻩': '黄', '⻭': '歯', '⻯': '竜', '⻲': '亀', '⻨': '麦', '⻆': '角', '戶': '戸' };
+function cadText(s) {
+  return String(s || '')
+    .replace(/[\u2E80-\u2FDF\uF900-\uFAFF\uFE10-\uFE1F\uFE30-\uFE4F\u6236]/g, ch => { const n = CJK_FIX[ch] || ch.normalize('NFKC'); return CJK_FIX[n] || n; })
+    .replace(/[\r\n\t]/g, ' ').replace(/[\u0000-\u001F]/g, '');
+}
+// 文字列の名目上の幅（全角=1、半角=0.5）
+function nominalWidth(s) {
+  let w = 0;
+  for (const ch of s) { const c = ch.codePointAt(0); w += (c < 0x100 || (c >= 0xFF61 && c <= 0xFF9F)) ? 0.5 : 1; }
+  return w;
+}
+// Shift_JIS（CP932）へ変換：Jw_cad は DXF を Shift_JIS で読むため
+let SJIS_MAP = null;
+function sjisEncode(str) {
+  if (!SJIS_MAP) {
+    SJIS_MAP = new Map();
+    const dec = new TextDecoder('shift_jis');
+    for (let b = 0xA1; b <= 0xDF; b++) SJIS_MAP.set(dec.decode(new Uint8Array([b])), [b]);
+    for (let hi = 0x81; hi <= 0xFC; hi++) {
+      if (hi > 0x9F && hi < 0xE0) continue;
+      for (let lo = 0x40; lo <= 0xFC; lo++) {
+        if (lo === 0x7F) continue;
+        const ch = dec.decode(new Uint8Array([hi, lo]));
+        if (ch.length === 1 && ch !== '�' && !SJIS_MAP.has(ch)) SJIS_MAP.set(ch, [hi, lo]);
+      }
+    }
+  }
+  const out = new Uint8Array(str.length * 4);
+  let n = 0, miss = 0;
+  for (const ch of str) {
+    const c = ch.codePointAt(0);
+    if (c < 0x80) { out[n++] = c; continue; }
+    let m = SJIS_MAP.get(ch);
+    if (!m) {   // ㎥ → m3 のように、互換分解で表せる文字はそれで代用
+      const alt = ch.normalize('NFKC');
+      if (alt !== ch && [...alt].every(a => a.codePointAt(0) < 0x80 || SJIS_MAP.has(a))) {
+        for (const a of alt) { const c2 = a.codePointAt(0); if (c2 < 0x80) out[n++] = c2; else for (const v of SJIS_MAP.get(a)) out[n++] = v; }
+        continue;
+      }
+    }
+    if (m) { for (const v of m) out[n++] = v; } else { out[n++] = 0x3F; miss++; }
+  }
+  return { bytes: out.slice(0, n), miss };
+}
+// グループ（色・線幅）→ DXFレイヤ名（Jw_cad・AutoCAD の両方で使える英数字）
+function layerNameOf(b) {
+  if (b.label) return 'SCAN';
+  const c = b.color || [0, 0, 0], mx = Math.max(...c), mn = Math.min(...c);
+  const tone = mx < 0.25 ? '' : (mx - mn < 0.08 ? '_GRAY' : '_C' + c.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase());
+  if (b.kind === 'fill') return 'FILL' + (tone || '_BLACK');
+  if (b.hatch) return 'HATCH_' + (b.width * 25.4 / 72).toFixed(2).replace('.', '') + tone;
+  return 'LINE_' + (b.width * 25.4 / 72).toFixed(2).replace('.', '') + tone;
+}
+
+exportBtn.addEventListener('click', () => {
+  const scale = currentScale();
+  const rot = parseFloat(document.getElementById('exportRot').value) || 0;
+  const rc = Math.round(Math.cos(rot * Math.PI / 180)), rs = Math.round(Math.sin(rot * Math.PI / 180));
+  const R = (x, y) => [(x * rc - y * rs) * scale, (x * rs + y * rc) * scale];
+  const nAng = (d) => (((d + rot) % 360) + 360) % 360;
+  const f3 = (v) => v.toFixed(3);
+  const doClean = document.getElementById('chkClean').checked;
+
+  // レイヤごとに集める
+  const layers = new Map();
+  const layer = (name) => { let L = layers.get(name); if (!L) { L = { segs: [], arcs: [], pts: [] }; layers.set(name, L); } return L; };
+  let rawCount = 0;
+  selected.forEach(idx => {
+    const b = buckets[idx], L = layer(layerNameOf(b));
+    for (const sg of b.segments) L.segs.push(sg);
+    for (const a of (b.arcs || [])) L.arcs.push(a);
+    // 点は書き出さない
+    rawCount += b.segments.length + (b.arcs || []).length + (b.points || []).length;
+  });
+  let nSeg = 0, nArc = 0, nPt = 0;
+  for (const L of layers.values()) {
+    if (doClean) { L.segs = cleanSegments(L.segs); L.arcs = cleanArcs(L.arcs); L.pts = cleanPoints(L.pts); }
+    nSeg += L.segs.length; nArc += L.arcs.length; nPt += L.pts.length;
+  }
+  const texts = [];
+  if (includeText) textItems.forEach(it => { const t = cadText(it.text).trim(); if (t) texts.push({ ...it, text: t, layer: 'TEXT' }); });
+  ocrResults.forEach(r => { if (!r.include) return; const t = cadText(r.text).trim(); if (t) texts.push({ text: t, x: r.page[0], y: r.page[1], angle: 0, height: r.heightPage, width: 0, layer: 'TEXT_OCR' }); });
+  const layerNames = [...layers.keys()];
+  for (const t of texts) if (!layerNames.includes(t.layer)) layerNames.push(t.layer);
+
+  let dxf = '';
+  dxf += '0\nSECTION\n2\nHEADER\n9\n$DWGCODEPAGE\n3\nANSI_932\n9\n$INSUNITS\n70\n4\n9\n$MEASUREMENT\n70\n1\n0\nENDSEC\n';
+  // TABLES：実線と各レイヤを定義（読み込み側が破線などに置き換えないように）
+  dxf += '0\nSECTION\n2\nTABLES\n';
+  dxf += '0\nTABLE\n2\nLTYPE\n70\n1\n';
+  dxf += '0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n';
+  dxf += '0\nENDTAB\n';
+  dxf += `0\nTABLE\n2\nLAYER\n70\n${layerNames.length + 1}\n`;
+  dxf += '0\nLAYER\n2\n0\n70\n0\n62\n7\n6\nCONTINUOUS\n';
+  for (const nm of layerNames) dxf += `0\nLAYER\n2\n${nm}\n70\n0\n62\n7\n6\nCONTINUOUS\n`;
+  dxf += '0\nENDTAB\n';
+  dxf += '0\nENDSEC\n';
+
+  dxf += '0\nSECTION\n2\nENTITIES\n';
+  for (const [nm, L] of layers) {
+    for (const [x1, y1, x2, y2] of L.segs) {
+      const p = R(x1, y1), q = R(x2, y2);
+      dxf += `0\nLINE\n8\n${nm}\n6\nCONTINUOUS\n10\n${f3(p[0])}\n20\n${f3(p[1])}\n30\n0.0\n11\n${f3(q[0])}\n21\n${f3(q[1])}\n31\n0.0\n`;
+    }
+    for (const a of L.arcs) {
+      const c = R(a.cx, a.cy), r = f3(a.r * scale);
+      if (a.full) dxf += `0\nCIRCLE\n8\n${nm}\n6\nCONTINUOUS\n10\n${f3(c[0])}\n20\n${f3(c[1])}\n30\n0.0\n40\n${r}\n`;
+      else dxf += `0\nARC\n8\n${nm}\n6\nCONTINUOUS\n10\n${f3(c[0])}\n20\n${f3(c[1])}\n30\n0.0\n40\n${r}\n50\n${nAng(a.a0).toFixed(3)}\n51\n${nAng(a.a1).toFixed(3)}\n`;
+    }
+    for (const pt of L.pts) {
+      const p = R(pt[0], pt[1]);
+      dxf += `0\nPOINT\n8\n${nm}\n10\n${f3(p[0])}\n20\n${f3(p[1])}\n30\n0.0\n`;
+    }
+  }
+  for (const t of texts) {
+    const h = Math.max(0.5, t.height * scale);
+    const p = R(t.x, t.y);
+    dxf += `0\nTEXT\n8\n${t.layer}\n10\n${f3(p[0])}\n20\n${f3(p[1])}\n30\n0.0\n40\n${f3(h)}\n1\n${t.text}\n`;
+    const ta = nAng(t.angle || 0);
+    if (Math.abs(ta) > 0.01 && Math.abs(ta - 360) > 0.01) dxf += `50\n${ta.toFixed(2)}\n`;
+    // 元の図面と同じ長さになるよう文字幅を合わせる
+    if (t.width > 0 && t.height > 0) {
+      const wf = t.width / (t.height * nominalWidth(t.text));
+      if (isFinite(wf) && Math.abs(wf - 1) > 0.03) dxf += `41\n${Math.min(3, Math.max(0.3, wf)).toFixed(3)}\n`;
+    }
+  }
+  dxf += '0\nENDSEC\n0\nEOF\n';
+
+  const enc = sjisEncode(dxf);
+  const blob = new Blob([enc.bytes], { type: 'application/dxf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = currentFileName.replace(/\.pdf$/i, '') + '_trace.dxf';
+  a.click();
+  URL.revokeObjectURL(url);
+  exportHint.textContent = `書き出し：直線 ${nSeg}・円/円弧 ${nArc}・文字 ${texts.length}` +
+    (doClean ? `（整理前 ${rawCount + texts.length}）` : '') + `／レイヤ ${layerNames.length}` +
+    (scaleFactor ? '／較正値で実寸' : scaleDen() ? `／縮尺1:${scaleDen()}の実寸（mm）` : '／PDFのポイント単位') +
+    (enc.miss ? `／Shift_JISにない文字 ${enc.miss} 個を「?」にしました` : '');
+});
+// ---------- スキャン図面の線認識 ----------
+
+const rasterRunBtn = document.getElementById('rasterRunBtn');
+const rasterStatus = document.getElementById('rasterStatus');
+const pSens = document.getElementById('pSens'), pSmooth = document.getElementById('pSmooth');
+const pText = document.getElementById('pText'), pNoise = document.getElementById('pNoise');
+
+function updatePrmLabels() {
+  document.getElementById('vSens').textContent = pSens.value + ' / 5';
+  document.getElementById('vSmooth').textContent = pSmooth.value + ' / 5';
+  document.getElementById('vText').textContent = parseFloat(pText.value).toFixed(1) + ' mm';
+  document.getElementById('vNoise').textContent = parseFloat(pNoise.value).toFixed(1) + ' mm';
+}
+[pSens, pSmooth, pText, pNoise].forEach(el => el.addEventListener('input', updatePrmLabels));
+updatePrmLabels();
+document.getElementById('pShowText').addEventListener('change', () => drawOverlay());
+
+function canvasToGray(cv) {
+  const d = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cv.width, cv.height).data;
+  const g = new Uint8Array(cv.width * cv.height);
+  for (let i = 0, j = 0; j < g.length; i += 4, j++) {
+    // 透明部分は白扱い
+    const a = d[i + 3] / 255;
+    g[j] = Math.round((0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * a + 255 * (1 - a));
+  }
+  return g;
+}
+
+function rotatedCopy(src, deg) {
+  const cv = document.createElement('canvas');
+  cv.width = src.width; cv.height = src.height;
+  const c = cv.getContext('2d', { willReadFrequently: true });
+  c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+  c.translate(cv.width / 2, cv.height / 2);
+  c.rotate(-deg * Math.PI / 180);
+  c.drawImage(src, -src.width / 2, -src.height / 2);
+  return cv;
+}
+
+const nextFrame = () => new Promise(r => setTimeout(r, 0));
+
+rasterRunBtn.addEventListener('click', runRaster);
+
+async function runRaster() {
+  if (!currentPage) return;
+  rasterRunBtn.disabled = true;
+  document.getElementById('rasterBox').classList.remove('suggest');
+  const say = async (m) => { rasterStatus.textContent = m; await nextFrame(); };
+  try {
+    await say('画像を展開中…');
+    let Sa = parseFloat(document.getElementById('rasterRes').value) * 25.4 / 72;
+    const maxPx = 16e6; // Safariのcanvas上限に合わせる
+    if (pageWidth * Sa * pageHeight * Sa > maxPx) Sa = Math.sqrt(maxPx / (pageWidth * pageHeight));
+    const ppmm = Sa * 72 / 25.4;
+    const vp = currentPage.getViewport({ scale: Sa });
+    let cv = document.createElement('canvas');
+    cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+    await currentPage.render({ canvasContext: cx, viewport: vp }).promise;
+    const w = cv.width, h = cv.height;
+    let gray = canvasToGray(cv);
+
+    let newSkew = 0;
+    if (document.getElementById('pDeskew').checked) {
+      await say('傾きを測定中…');
+      const C = [22, 16, 11, 7, 4][parseInt(pSens.value, 10) - 1];
+      const b = RasterCore.binarize(gray, w, h, C, Math.max(15, Math.round(ppmm * 4)) | 1);
+      newSkew = RasterCore.estimateSkew(b, w, h);
+      if (Math.abs(newSkew) < 0.05) newSkew = 0;
+    }
+    if (newSkew !== 0) {
+      cv = rotatedCopy(cv, newSkew);
+      gray = canvasToGray(cv);
+    }
+    if (newSkew !== skewDeg) {
+      // 表示用の下絵も同じ角度で回転（OCRもこの画像で行うため整合する）
+      const rc = rotatedCopy(origBaseCanvas, newSkew);
+      baseCanvas.getContext('2d').drawImage(rc, 0, 0);
+      skewDeg = newSkew;
+      ocrResults = []; ocrRects = []; calibPoints = [];
+      buildOcrList(); updateRectHint();
+      ocrStatus.textContent = '未実行';
+    }
+
+    const res = await RasterCore.vectorize(gray, w, h, {
+      pxPerMm: ppmm,
+      sensitivity: parseInt(pSens.value, 10),
+      smooth: parseInt(pSmooth.value, 10),
+      textMm: parseFloat(pText.value),
+      noiseMm: parseFloat(pNoise.value),
+      excludeText: document.getElementById('pExText').checked,
+      snap: document.getElementById('pSnap').checked,
+      arcs: document.getElementById('pArcs').checked
+    }, say);
+
+    // 画像ピクセル（y下向き）→ PDF座標（y上向き）
+    const segments = res.segments.map(([x1, y1, x2, y2]) => [x1 / Sa, (h - y1) / Sa, x2 / Sa, (h - y2) / Sa]);
+    const norm = (d) => ((d % 360) + 360) % 360;
+    const arcs = res.arcs.map(a => {
+      const st = -a.t0 * 180 / Math.PI, sw = -a.sweep * 180 / Math.PI;
+      const a0 = sw >= 0 ? st : st + sw, a1 = sw >= 0 ? st + sw : st;
+      return { cx: a.cx / Sa, cy: (h - a.cy) / Sa, r: a.r / Sa, a0: norm(a0), a1: norm(a1), full: a.full };
+    });
+    rasterTextBoxes = res.textBoxes.map(([x0, y0, x1, y1]) => [x0 / Sa, (h - y1) / Sa, x1 / Sa, (h - y0) / Sa]);
+
+    const adds = [{
+      key: 'raster-lines', kind: 'raster', label: 'スキャン認識：直線',
+      color: [0.85, 0.55, 0.17], width: 0, strokeCount: segments.length, segments, arcs: []
+    }];
+    if (arcs.length) adds.push({
+      key: 'raster-arcs', kind: 'raster', label: 'スキャン認識：円・円弧',
+      color: [0.85, 0.55, 0.17], width: 0, strokeCount: arcs.length, segments: [], arcs
+    });
+    undoStack = undoStack.filter(u => !u.key.startsWith('raster-')); updateUndo();
+    replaceBuckets(b => b.key.startsWith('raster-'), adds, true);
+
+    let msg = `直線 ${segments.length} 本・円/円弧 ${arcs.length} 個を認識しました。`;
+    if (document.getElementById('pExText').checked) msg += `\n文字として除外：${res.textBoxes.length} 箇所（水色の枠）`;
+    if (skewDeg) msg += `\n傾き補正：${skewDeg.toFixed(2)}°`;
+    msg += '\n誤認識は「手修正」で直してください。';
+    rasterStatus.textContent = msg;
+    statusEl.textContent = `スキャン認識：直線 ${segments.length} 本・円/円弧 ${arcs.length} 個`;
+  } catch (err) {
+    console.error(err);
+    rasterStatus.textContent = '認識に失敗しました：' + (err && err.message ? err.message : err) +
+      '\n図面が大きい場合は「標準」に切り替えて再実行してください。';
+  } finally {
+    rasterRunBtn.disabled = false;
+  }
+}
+
+// ---------- 手修正（消去・作図・元に戻す） ----------
+
+const eraseBtn = document.getElementById('eraseBtn');
+const drawBtn = document.getElementById('drawBtn');
+const undoBtn = document.getElementById('undoBtn');
+
+function setEditMode(m) {
+  editMode = m;
+  eraseBtn.classList.toggle('active', m === 'erase');
+  drawBtn.classList.toggle('active', m === 'draw');
+  drawStart = null; drawHover = null; eraseHover = null;
+  if (m) {
+    calibMode = false;
+    if (rectSelectMode) {
+      rectSelectMode = false;
+      rectModeBtn.classList.remove('active');
+      rectModeBtn.textContent = '範囲をドラッグ選択';
+      overlayCanvas.classList.remove('rectmode');
+    }
+  }
+  if (overlayCanvas.width && buckets) drawOverlay();
+}
+function updateUndo() { undoBtn.disabled = undoStack.length === 0; }
+
+eraseBtn.addEventListener('click', () => setEditMode(editMode === 'erase' ? null : 'erase'));
+drawBtn.addEventListener('click', () => setEditMode(editMode === 'draw' ? null : 'draw'));
+undoBtn.addEventListener('click', undo);
+
+function evtPos(e) {
+  const r = overlayCanvas.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
+function distPtSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+  let t = L2 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function angleInArc(deg, a0, a1) {
+  deg = ((deg % 360) + 360) % 360;
+  return a0 <= a1 ? (deg >= a0 && deg <= a1) : (deg >= a0 || deg <= a1);
+}
+
+function hitTest(cp) {
+  let best = null, bd = 7;
+  selected.forEach(bi => {
+    const b = buckets[bi];
+    b.segments.forEach((s, i) => {
+      const p = pdfToCanvas(s[0], s[1]), q = pdfToCanvas(s[2], s[3]);
+      const d = distPtSeg(cp[0], cp[1], p[0], p[1], q[0], q[1]);
+      if (d < bd) { bd = d; best = { bi, type: 'seg', i }; }
+    });
+    (b.arcs || []).forEach((a, i) => {
+      const c = pdfToCanvas(a.cx, a.cy);
+      const d = Math.abs(Math.hypot(cp[0] - c[0], cp[1] - c[1]) - a.r * renderScale);
+      const ang = -Math.atan2(cp[1] - c[1], cp[0] - c[0]) * 180 / Math.PI;
+      if (d < bd && (a.full || angleInArc(ang, a.a0, a.a1))) { bd = d; best = { bi, type: 'arc', i }; }
+    });
+  });
+  return best;
+}
+
+function snapEndpoint(cp) {
+  let best = null, bd = 8;
+  selected.forEach(bi => {
+    for (const s of buckets[bi].segments) {
+      for (const [x, y] of [[s[0], s[1]], [s[2], s[3]]]) {
+        const p = pdfToCanvas(x, y), d = Math.hypot(cp[0] - p[0], cp[1] - p[1]);
+        if (d < bd) { bd = d; best = p; }
+      }
+    }
+  });
+  return best;
+}
+function drawPoint(e) {
+  let cp = evtPos(e);
+  const sn = snapEndpoint(cp);
+  let snapped = false;
+  if (sn) { cp = sn; snapped = true; }
+  if (drawStart && e.shiftKey && !snapped) {
+    if (Math.abs(cp[0] - drawStart[0]) > Math.abs(cp[1] - drawStart[1])) cp = [cp[0], drawStart[1]];
+    else cp = [drawStart[0], cp[1]];
+  }
+  return { cp, snapped };
+}
+
+overlayCanvas.addEventListener('mousemove', (e) => {
+  if (!editMode) return;
+  if (editMode === 'erase') eraseHover = hitTest(evtPos(e));
+  else drawHover = drawPoint(e);
+  drawOverlay();
+});
+overlayCanvas.addEventListener('mouseleave', () => {
+  if (!editMode) return;
+  eraseHover = null; drawHover = null; drawOverlay();
+});
+
+overlayCanvas.addEventListener('click', (e) => {
+  if (!editMode) return;
+  if (editMode === 'erase') {
+    const h = hitTest(evtPos(e));
+    if (!h) return;
+    const b = buckets[h.bi];
+    const arr = h.type === 'seg' ? b.segments : b.arcs;
+    const item = arr.splice(h.i, 1)[0];
+    undoStack.push({ op: 'remove', key: b.key, type: h.type, i: h.i, item });
+    eraseHover = null;
+    afterEdit();
+  } else {
+    const { cp } = drawPoint(e);
+    if (!drawStart) { drawStart = cp; drawOverlay(); return; }
+    if (Math.hypot(cp[0] - drawStart[0], cp[1] - drawStart[1]) < 2) return;
+    let mi = buckets.findIndex(b => b.key === 'manual');
+    if (mi < 0) {
+      replaceBuckets(() => false, [{
+        key: 'manual', kind: 'raster', label: '手入力の線', color: [0.31, 0.82, 0.91],
+        width: 0, strokeCount: 0, segments: [], arcs: []
+      }], true);
+      mi = buckets.findIndex(b => b.key === 'manual');
+    }
+    if (!selected.has(mi)) selected.add(mi);
+    const a = canvasToPdf(drawStart[0], drawStart[1]), q = canvasToPdf(cp[0], cp[1]);
+    const seg = [a[0], a[1], q[0], q[1]];
+    buckets[mi].segments.push(seg);
+    undoStack.push({ op: 'add', key: 'manual', type: 'seg', item: seg });
+    drawStart = cp; // 続けて描ける（Esc・右クリックで終了）
+    afterEdit();
+  }
+});
+overlayCanvas.addEventListener('contextmenu', (e) => {
+  if (editMode === 'draw' && drawStart) { e.preventDefault(); drawStart = null; drawOverlay(); }
+});
+
+function afterEdit() {
+  buckets.forEach(b => { if (b.label) b.strokeCount = b.segments.length + (b.arcs || []).length; });
+  updateUndo(); buildBucketList(); updateExportState(); drawOverlay();
+}
+
+function undo() {
+  const u = undoStack.pop(); if (!u) return;
+  const b = buckets.find(x => x.key === u.key);
+  if (b) {
+    const arr = u.type === 'seg' ? b.segments : b.arcs;
+    if (u.op === 'remove') arr.splice(Math.min(u.i, arr.length), 0, u.item);
+    else { const k = arr.lastIndexOf(u.item); if (k >= 0) arr.splice(k, 1); }
+  }
+  if (u.op === 'add' && editMode === 'draw') drawStart = null;
+  afterEdit();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  else if (e.key === 'Escape') {
+    if (editMode === 'draw' && drawStart) { drawStart = null; drawOverlay(); }
+    else if (editMode) setEditMode(null);
+  }
+});
+
+function drawEditMarkers(ctx) {
+  if (editMode === 'erase' && eraseHover) {
+    const b = buckets[eraseHover.bi];
+    ctx.save();
+    ctx.strokeStyle = 'rgba(230,57,70,0.95)'; ctx.lineWidth = 3;
+    if (eraseHover.type === 'seg') {
+      const s = b.segments[eraseHover.i];
+      if (s) {
+        const p = pdfToCanvas(s[0], s[1]), q = pdfToCanvas(s[2], s[3]);
+        ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      }
+    } else if (b.arcs[eraseHover.i]) drawArc(ctx, b.arcs[eraseHover.i]);
+    ctx.restore();
+  }
+  if (editMode === 'draw') {
+    ctx.save();
+    ctx.fillStyle = '#4fd1e8'; ctx.strokeStyle = '#4fd1e8';
+    if (drawStart) { ctx.beginPath(); ctx.arc(drawStart[0], drawStart[1], 3.5, 0, Math.PI * 2); ctx.fill(); }
+    if (drawHover) {
+      const hp = drawHover.cp;
+      if (drawHover.snapped) { ctx.lineWidth = 1.5; ctx.strokeRect(hp[0] - 5, hp[1] - 5, 10, 10); }
+      if (drawStart) {
+        ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(drawStart[0], drawStart[1]); ctx.lineTo(hp[0], hp[1]); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+}
+
+</script>
+</body>
+</html>
