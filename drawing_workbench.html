@@ -129,6 +129,77 @@ body { font-family: var(--font); background: var(--paper); color: var(--ink); fo
 @media (prefers-reduced-motion: no-preference) {
   .zone, .bulk { transition: background-color .12s, border-color .12s; }
 }
+
+/* ===== 変更登録パネル（変更履歴 v1） ===== */
+.bar .regbtn { margin-left: auto; align-self: center; appearance: none; font: inherit; font-size: 13px; font-weight: 700;
+  color: var(--bar-ink); background: transparent; border: 1px solid rgba(230,235,236,.45); border-radius: 5px;
+  padding: 6px 12px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.bar .regbtn:hover { background: rgba(230,235,236,.12); }
+.bar .regbtn[aria-pressed="true"] { background: var(--bar-ink); color: var(--bar); }
+.bar .regbtn:focus-visible { outline: 2px solid var(--bar-ink); outline-offset: 2px; }
+.bar .regbtn .cnt { font-size: 11px; font-weight: 700; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #c2571a; color: #fff; text-align: center; }
+
+body.reg-open .view { right: 380px; }
+.reg { position: fixed; top: calc(46px + var(--top)); right: 0; bottom: var(--bot); width: 380px; max-width: 100vw;
+  background: var(--sheet); color: var(--ink); border-left: 1px solid var(--rule); z-index: 9; display: none;
+  flex-direction: column; font-size: 13px; }
+body.reg-open .reg { display: flex; }
+.reg-scroll { flex: 1; overflow-y: auto; padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.reg h2 { margin: 0; font-size: 15px; }
+.reg h3 { margin: 0 0 6px; font-size: 13px; }
+.reg .muted { color: var(--ink-soft); font-size: 12px; }
+.reg .card { border: 1px solid var(--rule); border-radius: 6px; padding: 10px; background: var(--paper); }
+.reg label.f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-soft); }
+.reg input[type=text], .reg input[type=number], .reg select, .reg textarea {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--sheet); border: 1px solid var(--rule);
+  border-radius: 4px; padding: 6px 8px; width: 100%; }
+.reg textarea { resize: vertical; min-height: 44px; }
+.reg .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.reg .chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.reg .chips label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ink); }
+.reg .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.reg .b { appearance: none; font: inherit; font-size: 12.5px; border-radius: 4px; padding: 7px 11px; cursor: pointer;
+  border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); }
+.reg .b:hover { border-color: var(--ink-soft); }
+.reg .b.pri { background: var(--ink); color: var(--sheet); border-color: var(--ink); font-weight: 700; }
+.reg .b.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.reg .b:disabled { opacity: .4; cursor: not-allowed; }
+.reg .b:focus-visible { outline: 2px solid var(--old); outline-offset: 1px; }
+.reg .ctx { font-size: 12px; line-height: 1.5; word-break: break-all; }
+.reg .ctx b { font-weight: 700; }
+.reg .ctx .o { color: var(--old); font-weight: 700; } .reg .ctx .n { color: var(--new); font-weight: 700; }
+.reg .rlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.reg .rlist button { width: 100%; appearance: none; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 5px;
+  background: var(--sheet); color: var(--ink); }
+.reg .rlist button.sel { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.reg .num { flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 11px; color: #fff; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; }
+.reg .k-add { background: #c8322b; } .reg .k-del { background: #1f5fbf; } .reg .k-mix { background: #7a3fb0; } .reg .k-man { background: #5b6770; }
+.reg .tag { margin-left: auto; font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.reg .tag.done { color: var(--ok); } .reg .tag.skip { color: var(--ink-soft); }
+.reg .thumb { width: 100%; max-height: 240px; object-fit: contain; border: 1px solid var(--rule); border-radius: 4px; background: #fff; display: block; }
+.reg .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--ink-soft); }
+.reg .legend span { display: inline-flex; align-items: center; gap: 4px; }
+.reg .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.reg table.hist { width: 100%; border-collapse: collapse; font-size: 12px; }
+.reg table.hist th, .reg table.hist td { border-bottom: 1px solid var(--rule); padding: 5px 4px; text-align: left; vertical-align: top; }
+.reg table.hist th { color: var(--ink-soft); font-weight: 400; }
+.reg table.hist tr.click { cursor: pointer; }
+.reg table.hist tr.click:hover td { background: var(--grid); }
+.reg table.hist tr.editing td { background: var(--grid); }
+.reg .st { font-size: 11px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.reg .st-未提示 { background: var(--grid); } .reg .st-協議中 { background: #fcebdd; color: #8f3a0c; }
+.reg .st-合意 { background: #e6f2ef; color: #0b5e5a; } .reg .st-対象外 { border: 1px solid var(--rule); color: var(--ink-soft); }
+.reg .foot { border-top: 1px solid var(--rule); padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: var(--sheet); }
+.reg .foot .muted { flex: 1 1 100%; }
+.reg .note { font-size: 12px; color: var(--warn); }
+.reg .x { appearance: none; border: 0; background: none; color: var(--ink-soft); cursor: pointer; font-size: 15px; padding: 0 4px; }
+@media (max-width: 720px) {
+  body.reg-open .view { right: 0; }
+  .reg { width: 100vw; }
+  .bar .regbtn .lbl { display: none; }
+}
 </style>
 </head>
 <body>
@@ -142,6 +213,7 @@ body { font-family: var(--font); background: var(--paper); color: var(--ink); fo
     <button class="tab" role="tab" data-view="pdf" aria-selected="false"><span class="dot"></span>PDF差分</button>
     <button class="tab" role="tab" data-view="dxf" aria-selected="false"><span class="dot"></span>PDF→DXF</button>
   </nav>
+  <button type="button" class="regbtn" id="reg-btn" aria-pressed="false" title="差分を変更履歴として登録するパネルを開きます"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h10M9 12h10M9 19h10"></path><path d="M4 5h.01M4 12h.01M4 19h.01"></path></svg><span class="lbl">変更登録</span><span class="cnt" id="reg-btn-cnt" style="display:none"></span></button>
 </header>
 
 <section class="view active" id="view-home">
@@ -195,6 +267,90 @@ body { font-family: var(--font); background: var(--paper); color: var(--ink); fo
 <section class="view" id="view-dxf"></section>
 
 <div class="toast" id="toast" role="status"></div>
+
+<aside class="reg" id="reg" aria-label="変更登録">
+  <div class="reg-scroll">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <h2 style="flex:1;">変更登録</h2>
+      <button type="button" class="x" id="reg-close" aria-label="変更登録を閉じる">×</button>
+    </div>
+    <label class="f">案件名・案件コード
+      <input type="text" id="reg-project" placeholder="例：〇〇計画（顧客の個人情報は入れない）">
+    </label>
+
+    <div class="card" id="reg-ctx-card">
+      <div class="ctx" id="reg-ctx">比較画面（JWW差分・JWW図枠差分・PDF差分）で図面を開くと、差分箇所を自動で検出します。</div>
+    </div>
+
+    <div id="reg-detect-area" style="display:none;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <h3 style="margin:0;flex:1;">差分箇所 <span class="muted" id="reg-rcount"></span></h3>
+        <button type="button" class="b" id="reg-redetect" title="この比較の差分箇所を検出し直します">再検出</button>
+        <button type="button" class="b" id="reg-manual" title="図面上をドラッグして範囲を指定し、差分箇所として追加します">＋範囲を指定</button>
+      </div>
+      <div class="legend"><span><i style="background:#c8322b"></i>新で追加</span><span><i style="background:#1f5fbf"></i>旧から削除</span><span><i style="background:#7a3fb0"></i>追加と削除</span><span><i style="background:#5b6770"></i>手動で指定</span></div>
+      <p class="muted" style="margin:0;">番号をクリックで登録。Ctrl（またはShift）を押しながらクリックすると、複数の差分を1件にまとめられます。</p>
+      <p class="note" id="reg-manual-hint" style="display:none;margin:0;">図面上をドラッグして範囲を囲んでください。<button type="button" class="b" id="reg-manual-cancel" style="margin-left:6px;">やめる</button></p>
+      <ul class="rlist" id="reg-rlist"></ul>
+    </div>
+
+    <form class="card" id="reg-form" style="display:none;flex-direction:column;gap:8px;" autocomplete="off">
+      <h3 style="margin:0;" id="reg-form-title">差分を登録</h3>
+      <img class="thumb" id="reg-thumb" alt="差分箇所の切り出し（青＝旧のみ、赤＝新のみ、灰＝共通）">
+      <label class="f">図面・頁
+        <input type="text" id="reg-dwg">
+      </label>
+      <label class="f">箇所
+        <input type="text" id="reg-place" placeholder="例：2階 会議室 天井">
+      </label>
+      <label class="f">変更内容
+        <textarea id="reg-detail" rows="2" placeholder="例：ダウンライト4台追加"></textarea>
+      </label>
+      <fieldset style="border:0;margin:0;padding:0;">
+        <legend class="muted" style="padding:0 0 4px;">影響工種</legend>
+        <div class="chips" id="reg-trades"></div>
+      </fieldset>
+      <div class="row2">
+        <label class="f">増減
+          <select id="reg-dir"><option>未定</option><option>増額</option><option>減額</option><option>増減なし</option></select>
+        </label>
+        <label class="f">概算増減額（円）
+          <input type="number" id="reg-amount" step="1000" inputmode="numeric" placeholder="未入力可">
+        </label>
+      </div>
+      <div class="row2">
+        <label class="f">指示元・根拠
+          <input type="text" id="reg-source" placeholder="例：質疑回答No.12">
+        </label>
+        <label class="f">状態
+          <select id="reg-status"><option>未提示</option><option>協議中</option><option>合意</option><option>対象外</option></select>
+        </label>
+      </div>
+      <div class="btns" style="justify-content:flex-end;">
+        <button type="button" class="b" id="reg-cancel">取消</button>
+        <button type="button" class="b" id="reg-skip" title="対象外として記録し、次回から登録済み扱いにします">対象外にする</button>
+        <button type="submit" class="b pri" id="reg-save">履歴に登録</button>
+      </div>
+    </form>
+
+    <div>
+      <h3>登録済み <span class="muted" id="reg-hcount"></span></h3>
+      <table class="hist">
+        <thead><tr><th>No</th><th>図面・内容</th><th>増減</th><th>状態</th><th></th></tr></thead>
+        <tbody id="reg-hbody"></tbody>
+      </table>
+      <p class="muted" id="reg-hempty" style="margin:6px 0 0;">まだ登録はありません。</p>
+    </div>
+  </div>
+  <div class="foot">
+    <span class="muted" id="reg-savestate">登録内容はこのブラウザに自動保存されます。</span>
+    <button type="button" class="b pri" id="reg-export" title="履歴ファイル（.json）を書き出します。共有ドライブの案件フォルダに保存してください">履歴を書き出し</button>
+    <button type="button" class="b" id="reg-import" title="書き出した履歴ファイル（.json）を読み込んで合わせます">読み込み</button>
+    <button type="button" class="b" id="reg-csv" title="Excelで開ける一覧（.csv）を出力します">Excel一覧</button>
+    <input type="file" id="reg-import-file" accept=".json,application/json" hidden>
+  </div>
+</aside>
+
 <input type="file" id="pick-old" multiple hidden>
 <input type="file" id="pick-new" multiple hidden>
 <input type="file" id="pick-bulk" multiple hidden>
@@ -449,6 +605,725 @@ dxf: "<!DOCTYPE html>\n<\!-- saved from url=(0114)https://aggressive-gold-rnu8tt
   $("btn-clear").addEventListener("click", () => { files.old = []; files.new = []; render(); });
   $("btn-open").addEventListener("click", open);
   render();
+})();
+</script>
+<script>
+// ===== 変更登録パネル（変更履歴 v1） =====
+// 比較系3モード（JWW差分・JWW図枠差分・PDF差分）の画面から、差分箇所を自動検出して番号を付け、
+// 箇所・内容・影響工種・増減などを付けて「変更履歴」として記録する。各アプリ本体には手を入れず、
+// 外枠からアプリ内の state / 描画関数を読み取って動く（同じオリジンの srcdoc iframe）。
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const COMPARE = { jww: "JWW差分", sheet: "JWW図枠差分", pdf: "PDF差分" };
+  const LS_KEY = "wb-change-history-v1";
+  const TRADES = ["建築", "構造", "電気", "機械", "内装", "外構"];
+  const COLORS = { add: "#c8322b", del: "#1f5fbf", mix: "#7a3fb0", man: "#5b6770" };
+  const KIND_TEXT = { add: "追加", del: "削除", mix: "変更", man: "指定範囲" };
+  const THRESH = 235; // 各アプリと同じ「線あり」判定のしきい値
+
+  // ---------- 保存（ブラウザ内） ----------
+  function blankStore() { return { format: "wb-change-history", version: 1, project: "", items: [], seq: 0, dirty: 0 }; }
+  function loadStore() {
+    try {
+      const s = JSON.parse(localStorage.getItem(LS_KEY));
+      if (s && Array.isArray(s.items)) return Object.assign(blankStore(), s);
+    } catch (e) {}
+    return blankStore();
+  }
+  let store = loadStore();
+  function persist() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(store)); }
+    catch (e) { toast("ブラウザ内の保存容量が足りません。「履歴を書き出し」でファイルに保存してください。"); }
+    renderHist(); updateBadge();
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = $("toast"); if (!el) return;
+    el.textContent = msg; el.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 4000);
+  }
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v; else if (k === "style") el.style.cssText = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const k of kids) if (k != null && k !== false) el.append(k.nodeType ? k : String(k));
+    return el;
+  }
+  const stem = (n) => String(n || "").replace(/\.(jww|pdf)$/i, "");
+  const yen = (n) => (n == null || n === "" || isNaN(n)) ? "" : Number(n).toLocaleString("ja-JP") + "円";
+  const signed = (it) => {
+    if (it.amount == null || it.amount === "" || isNaN(it.amount)) return it.dir === "未定" ? "" : it.dir;
+    const v = Number(it.amount);
+    return (it.dir === "減額" ? "−" : it.dir === "増額" ? "+" : "") + v.toLocaleString("ja-JP");
+  };
+
+  // ---------- いま表示中の比較 ----------
+  const activeView = () => { const v = document.querySelector(".view.active"); return v ? v.id.replace("view-", "") : ""; };
+  const frameOf = (app) => document.querySelector("#view-" + app + " iframe");
+
+  function getCtx() {
+    const app = activeView();
+    if (!COMPARE[app]) return { app, ok: false, reason: app === "dxf" ? "dxf" : "home" };
+    const f = frameOf(app);
+    const w = f && f.contentWindow;
+    if (!w) return { app, ok: false, reason: "empty" };
+    let s;
+    try { s = w.eval("state"); } catch (e) { return { app, ok: false, reason: "empty" }; }
+    if (!s || !s.docA || !s.docB || !s.baseW || !s.baseH) return { app, ok: false, reason: "empty", w };
+    if (app === "pdf" && (!s.pageA || !s.pageB)) return { app, ok: false, reason: "empty", w };
+    let oldName, newName, label, drawing;
+    try {
+      if (app === "pdf") {
+        oldName = (s.slotNames && s.slotNames[s.roleA]) || s.fileAName || "旧";
+        newName = (s.slotNames && s.slotNames[s.roleB]) || s.fileBName || "新";
+        label = `旧 ${s.pageNumA}頁 ／ 新 ${s.pageNumB}頁`;
+        drawing = `${stem(newName)} ${s.pageNumB}頁`;
+      } else {
+        const sh = w.eval("shown") || {};
+        const nm = (x) => (x && (x.name || x.label)) || "";
+        oldName = nm(sh.old) || "（なし）"; newName = nm(sh.new) || "（なし）";
+        const t = w.document.getElementById("pair-title");
+        label = app === "sheet" ? (t ? t.textContent.trim() : "") : "";
+        drawing = stem(nm(sh.new) || nm(sh.old));
+      }
+    } catch (e) { return { app, ok: false, reason: "empty", w }; }
+    const sig = [app, oldName, newName, app === "pdf" ? label : ""].join("|");
+    const key = [sig, w.document.getElementById("pair-title") ? w.document.getElementById("pair-title").textContent : "",
+      Math.round(s.baseW), Math.round(s.baseH), Math.round(s.aLeft), Math.round(s.aTop), Math.round(s.bLeft), Math.round(s.bTop)].join("|");
+    return { app, ok: true, w, s, oldName, newName, label, drawing, sig, key };
+  }
+
+  // ---------- 差分画像の取得（アプリ別） ----------
+  // 戻り値: { dA, dB, w, h, toBase(x,y) } … dA/dB は旧/新のRGBA、座標は画像px。toBase で各アプリの「基準px」に変換
+  function diffSource(ctx) {
+    const s = ctx.s, w = ctx.w;
+    if (ctx.app === "pdf") {
+      const r = w.getAlignedBuffers();
+      // baseW/baseH は小数のことがあるので、実際の画像サイズ（整数）を求める
+      const n = r.dataA.length / 4;
+      let iw = Math.floor(r.w), ih = Math.floor(r.h);
+      for (const cw of [Math.floor(r.w), Math.ceil(r.w), Math.round(r.w)]) {
+        if (cw > 0 && n % cw === 0) { iw = cw; ih = n / cw; break; }
+      }
+      return { dA: r.dataA, dB: r.dataB, w: iw, h: ih, k: 1, toBase: (x, y) => [x, y] };
+    }
+    const s0 = Math.min(1, 1800 / Math.max(s.baseW, s.baseH));
+    const vw = Math.max(1, Math.round(s.baseW * s0)), vh = Math.max(1, Math.round(s.baseH * s0));
+    const view = { w: vw, h: vh, dpr: 1, scale: s0, ox: s.baseW / 2, oy: s.baseH / 2 };
+    const L = w.buildLayers(view, false, false);
+    const dA = L.A.getContext("2d").getImageData(0, 0, vw, vh).data;
+    const dB = L.B.getContext("2d").getImageData(0, 0, vw, vh).data;
+    return { dA, dB, w: vw, h: vh, k: s0, toBase: (x, y) => [s.baseW / 2 + (x - vw / 2) / s0, s.baseH / 2 + (y - vh / 2) / s0] };
+  }
+
+  // 旧のみ・新のみの画素をマス目に集計 → 近いものをまとめて連結 → 差分箇所の矩形
+  function findRegions(src) {
+    const { dA, dB, w, h } = src;
+    const c = Math.max(1, Math.ceil(Math.max(w, h) / 640));
+    const gw = Math.ceil(w / c), gh = Math.ceil(h / c), N = gw * gh;
+    const add = new Uint32Array(N), del = new Uint32Array(N);
+    for (let y = 0; y < h; y++) {
+      const row = ((y / c) | 0) * gw;
+      for (let x = 0, i = y * w * 4; x < w; x++, i += 4) {
+        const inA = 0.299 * dA[i] + 0.587 * dA[i + 1] + 0.114 * dA[i + 2] < THRESH;
+        const inB = 0.299 * dB[i] + 0.587 * dB[i + 1] + 0.114 * dB[i + 2] < THRESH;
+        if (inA !== inB) { const g = row + ((x / c) | 0); if (inB) add[g]++; else del[g]++; }
+      }
+    }
+    const on = new Uint8Array(N);
+    for (let i = 0; i < N; i++) on[i] = add[i] + del[i] >= 2 ? 1 : 0;
+    // 近い差分を1つにまとめる（横→縦の順に膨張）
+    const r = Math.max(2, Math.round(Math.max(gw, gh) / 110));
+    const hz = new Uint8Array(N), dl = new Uint8Array(N);
+    for (let y = 0; y < gh; y++) {
+      let run = 0; const o = y * gw;
+      for (let x = -r; x < gw + r; x++) {
+        if (x + r < gw && on[o + x + r]) run++;
+        if (x - r - 1 >= 0 && on[o + x - r - 1]) run--;
+        if (x >= 0 && x < gw) hz[o + x] = run > 0 ? 1 : 0;
+      }
+    }
+    for (let x = 0; x < gw; x++) {
+      let run = 0;
+      for (let y = -r; y < gh + r; y++) {
+        if (y + r < gh && hz[(y + r) * gw + x]) run++;
+        if (y - r - 1 >= 0 && hz[(y - r - 1) * gw + x]) run--;
+        if (y >= 0 && y < gh) dl[y * gw + x] = run > 0 ? 1 : 0;
+      }
+    }
+    const seen = new Uint8Array(N), out = [];
+    const minPx = Math.max(24, w * h * 0.000004);
+    for (let st = 0; st < N; st++) {
+      if (!dl[st] || seen[st]) continue;
+      const stack = [st]; seen[st] = 1;
+      let x0 = gw, y0 = gh, x1 = -1, y1 = -1, sa = 0, sd = 0;
+      while (stack.length) {
+        const i = stack.pop(), x = i % gw, y = (i / gw) | 0;
+        if (on[i]) {
+          sa += add[i]; sd += del[i];
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        if (x > 0 && dl[i - 1] && !seen[i - 1]) { seen[i - 1] = 1; stack.push(i - 1); }
+        if (x < gw - 1 && dl[i + 1] && !seen[i + 1]) { seen[i + 1] = 1; stack.push(i + 1); }
+        if (y > 0 && dl[i - gw] && !seen[i - gw]) { seen[i - gw] = 1; stack.push(i - gw); }
+        if (y < gh - 1 && dl[i + gw] && !seen[i + gw]) { seen[i + gw] = 1; stack.push(i + gw); }
+      }
+      if (x1 < 0 || sa + sd < minPx) continue;
+      const kind = sa > sd * 3 ? "add" : sd > sa * 3 ? "del" : "mix";
+      const pad = Math.max(w, h) * 0.006;
+      const ix0 = Math.max(0, x0 * c - pad), iy0 = Math.max(0, y0 * c - pad);
+      const ix1 = Math.min(w, (x1 + 1) * c + pad), iy1 = Math.min(h, (y1 + 1) * c + pad);
+      const [bx0, by0] = src.toBase(ix0, iy0), [bx1, by1] = src.toBase(ix1, iy1);
+      out.push({ x: bx0, y: by0, w: bx1 - bx0, h: by1 - by0, kind, px: sa + sd });
+    }
+    out.sort((a, b) => b.px - a.px);
+    const top = out.slice(0, 40);
+    // 読む順（上から、同じ段は左から）に番号
+    const band = (src.toBase(0, h)[1] - src.toBase(0, 0)[1]) * 0.08 || 1;
+    top.sort((a, b) => Math.floor(a.y / band) - Math.floor(b.y / band) || a.x - b.x);
+    return top;
+  }
+
+  // 差分箇所の切り出し画像（青＝旧のみ、赤＝新のみ、灰＝共通）
+  function cropImage(ctx, region) {
+    const s = ctx.s, w = ctx.w;
+    const MAXW = 480, MAXH = 320;
+    // 周辺も写るように広げて切り出す（対象範囲は枠で示す）
+    const minSide = Math.max(s.baseW, s.baseH) * 0.09;
+    const cw0 = Math.max(region.w * 1.8, minSide), ch0 = Math.max(region.h * 1.8, minSide * 0.66);
+    const box = { x: region.x + region.w / 2 - cw0 / 2, y: region.y + region.h / 2 - ch0 / 2, w: cw0, h: ch0 };
+    let canvas, sx = 1, ox = 0, oy = 0;
+    if (ctx.app === "pdf") {
+      const src = cache && cache.key === ctx.key && cache.w === w ? cache.src : diffSource(ctx);
+      const x0 = Math.max(0, Math.floor(box.x)), y0 = Math.max(0, Math.floor(box.y));
+      const x1 = Math.min(src.w, Math.ceil(box.x + box.w)), y1 = Math.min(src.h, Math.ceil(box.y + box.h));
+      ox = x0; oy = y0;
+      const cw = Math.max(1, x1 - x0), ch = Math.max(1, y1 - y0);
+      const full = document.createElement("canvas"); full.width = cw; full.height = ch;
+      const img = full.getContext("2d").createImageData(cw, ch), o = img.data;
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+        const i = ((y0 + y) * src.w + (x0 + x)) * 4, j = (y * cw + x) * 4;
+        const inA = 0.299 * src.dA[i] + 0.587 * src.dA[i + 1] + 0.114 * src.dA[i + 2] < THRESH;
+        const inB = 0.299 * src.dB[i] + 0.587 * src.dB[i + 1] + 0.114 * src.dB[i + 2] < THRESH;
+        let r = 255, g = 255, b = 255;
+        if (inA && inB) { r = 120; g = 120; b = 126; } else if (inA) { r = 33; g = 98; b = 232; } else if (inB) { r = 224; g = 48; b = 48; }
+        o[j] = r; o[j + 1] = g; o[j + 2] = b; o[j + 3] = 255;
+      }
+      full.getContext("2d").putImageData(img, 0, 0);
+      const k = Math.min(1, MAXW / cw, MAXH / ch);
+      canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(cw * k)); canvas.height = Math.max(1, Math.round(ch * k));
+      const g2 = canvas.getContext("2d"); g2.imageSmoothingQuality = "high";
+      g2.drawImage(full, 0, 0, canvas.width, canvas.height);
+      sx = canvas.width / cw;
+    } else {
+      const k = Math.min(MAXW / Math.max(1, box.w), MAXH / Math.max(1, box.h), 6);
+      const view = { w: Math.max(1, Math.round(box.w * k)), h: Math.max(1, Math.round(box.h * k)), dpr: 1, scale: k,
+        ox: box.x + box.w / 2, oy: box.y + box.h / 2 };
+      canvas = w.buildLayers(view, true, false).diff;
+      sx = k; ox = box.x + box.w / 2 - view.w / 2 / k; oy = box.y + box.h / 2 - view.h / 2 / k;
+    }
+    const out = document.createElement("canvas"); out.width = canvas.width; out.height = canvas.height;
+    const g = out.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, out.width, out.height); g.drawImage(canvas, 0, 0);
+    g.strokeStyle = COLORS[region.kind] || COLORS.man; g.lineWidth = 2; g.setLineDash([6, 4]);
+    for (const r of region.parts || [region]) g.strokeRect((r.x - ox) * sx, (r.y - oy) * sx, r.w * sx, r.h * sx);
+    return out.toDataURL("image/jpeg", 0.75);
+  }
+
+  // ---------- 状態 ----------
+  let open = false, cur = null, lastKey = "", regions = [], selected = -1, picks = [], cache = null;
+  let form = null; // { mode: 'new', region } | { mode: 'edit', id }
+  let drawing = false;
+
+  function iou(a, b) {
+    const x0 = Math.max(a.x, b.x), y0 = Math.max(a.y, b.y), x1 = Math.min(a.x + a.w, b.x + b.w), y1 = Math.min(a.y + a.h, b.y + b.h);
+    const inter = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+    const uni = a.w * a.h + b.w * b.h - inter;
+    return uni > 0 ? inter / uni : 0;
+  }
+  function linkRegions() {
+    if (!cur || !cur.ok) return;
+    for (const r of regions) {
+      const hit = store.items.find((it) => it.sig === cur.sig &&
+        ((it.box && iou(it.box, r) > 0.4) || (it.parts || []).some((p) => iou(p, r) > 0.4)));
+      r.itemId = hit ? hit.id : null;
+    }
+    // 手動で登録した範囲など、検出に出てこない登録済みも図面上に出す
+    for (const it of store.items) {
+      if (it.sig !== cur.sig || !it.box) continue;
+      if (!regions.some((r) => r.itemId === it.id)) regions.push({ x: it.box.x, y: it.box.y, w: it.box.w, h: it.box.h, kind: it.kind || "man", itemId: it.id, fromItem: true });
+    }
+  }
+
+  function detect() {
+    const ctx = getCtx();
+    if (!ctx.ok) return;
+    $("reg-rcount").textContent = "検出中…";
+    setTimeout(() => {
+      try {
+        const src = diffSource(ctx);
+        cache = { key: ctx.key, w: ctx.w, src: ctx.app === "pdf" ? src : null };
+        const manual = regions.filter((r) => r.kind === "man" && !r.itemId);
+        regions = findRegions(src).concat(manual);
+        cur = ctx; linkRegions();
+        selected = -1; picks = [];
+        renderRegions();
+      } catch (e) {
+        console.error(e);
+        $("reg-rcount").textContent = "検出できませんでした";
+      }
+    }, 30);
+  }
+
+  // ---------- 図面上の番号枠（アプリ画面の上に重ねる） ----------
+  let ovState = { el: null, key: "" };
+  function overlay(ctx) {
+    const d = ctx.w.document, wrap = d.getElementById("stage-wrap");
+    if (!wrap) return null;
+    let ov = d.getElementById("wbreg-ov");
+    if (!ov) {
+      if (getComputedStyle(wrap).position === "static") wrap.style.position = "relative";
+      ov = d.createElement("div"); ov.id = "wbreg-ov";
+      ov.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden;";
+      const st = d.createElement("style");
+      st.textContent = "#wbreg-ov .bx{position:absolute;box-sizing:border-box;border:2px solid;border-radius:3px;pointer-events:auto;cursor:pointer}" +
+        "#wbreg-ov .bx.sel{border-width:3px;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 0 4px rgba(0,0,0,.35)}" +
+        "#wbreg-ov .bx.done{border-style:dashed}" +
+        "#wbreg-ov .bx .n{position:absolute;left:-11px;top:-11px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;color:#fff;" +
+        "font:700 11px/20px sans-serif;text-align:center;box-shadow:0 0 0 1.5px #fff;white-space:nowrap}" +
+        "#wbreg-ov.drawing{pointer-events:auto;cursor:crosshair;background:rgba(30,42,51,.04)}#wbreg-ov.drawing .bx{pointer-events:none}" +
+        "#wbreg-ov .rb{position:absolute;border:2px dashed #1e2a33;background:rgba(30,42,51,.08)}";
+      d.head.appendChild(st);
+      wrap.appendChild(ov);
+      wireDraw(ctx.w, ov);
+    }
+    return ov;
+  }
+  function renderOverlay(force) {
+    if (!cur || !cur.ok) return;
+    let ov;
+    try { ov = overlay(cur); } catch (e) { return; }
+    if (!ov) return;
+    ov.style.display = open ? "" : "none";
+    if (!open) return;
+    if (force || ovState.el !== ov || ov.childElementCount !== regions.length + (ov.querySelector(".rb") ? 1 : 0)) {
+      ov.querySelectorAll(".bx").forEach((e) => e.remove());
+      regions.forEach((r, i) => {
+        const b = ov.ownerDocument.createElement("div");
+        b.className = "bx" + (picks.includes(i) ? " sel" : "") + (r.itemId ? " done" : "");
+        const col = COLORS[r.kind] || COLORS.man;
+        b.style.borderColor = col;
+        const n = ov.ownerDocument.createElement("span");
+        n.className = "n"; n.style.background = col;
+        const it = r.itemId && store.items.find((x) => x.id === r.itemId);
+        n.textContent = it ? `${i + 1} ✓${it.no}` : String(i + 1);
+        b.appendChild(n);
+        b.title = `${i + 1}：${KIND_TEXT[r.kind] || ""}` + (it ? `（登録済 ${it.no}）` : "");
+        b.addEventListener("pointerdown", (e) => e.stopPropagation());
+        b.addEventListener("click", (e) => { e.stopPropagation(); select(i, false, e.ctrlKey || e.metaKey || e.shiftKey); });
+        r._el = b;
+        ov.appendChild(b);
+      });
+      ovState.el = ov; ovState.key = "";
+    }
+    place(ov);
+  }
+  function place(ov) {
+    const s = cur.s, W = ov.clientWidth, H = ov.clientHeight;
+    const key = [s.scale, s.panX, s.panY, W, H, s.baseW, s.baseH].join(",");
+    if (key === ovState.key) return;
+    ovState.key = key;
+    for (const r of regions) {
+      if (!r._el) continue;
+      const x = W / 2 + s.panX + s.scale * (r.x - s.baseW / 2);
+      const y = H / 2 + s.panY + s.scale * (r.y - s.baseH / 2);
+      r._el.style.left = x + "px"; r._el.style.top = y + "px";
+      r._el.style.width = Math.max(6, r.w * s.scale) + "px"; r._el.style.height = Math.max(6, r.h * s.scale) + "px";
+    }
+  }
+  function clearOverlay(ctx) {
+    try { const ov = ctx && ctx.w && ctx.w.document.getElementById("wbreg-ov"); if (ov) ov.querySelectorAll(".bx").forEach((e) => e.remove()); } catch (e) {}
+  }
+  let raf = 0;
+  function loop() {
+    raf = 0;
+    if (!open || !cur || !cur.ok) return;
+    try {
+      const ov = cur.w.document.getElementById("wbreg-ov");
+      if (!ov || ovState.el !== ov) renderOverlay(true); else place(ov);
+    } catch (e) {}
+    raf = requestAnimationFrame(loop);
+  }
+
+  // 範囲を指定して追加（図面上をドラッグ）
+  function wireDraw(win, ov) {
+    let start = null, rb = null;
+    const toBase = (e) => {
+      const s = cur.s, rect = ov.getBoundingClientRect();
+      const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+      return [(sx - rect.width / 2 - s.panX) / s.scale + s.baseW / 2, (sy - rect.height / 2 - s.panY) / s.scale + s.baseH / 2, sx, sy];
+    };
+    ov.addEventListener("pointerdown", (e) => {
+      if (!drawing) return;
+      e.stopPropagation(); e.preventDefault();
+      start = toBase(e);
+      rb = win.document.createElement("div"); rb.className = "rb"; ov.appendChild(rb);
+      ov.setPointerCapture(e.pointerId);
+    });
+    ov.addEventListener("pointermove", (e) => {
+      if (!start || !rb) return;
+      const p = toBase(e);
+      rb.style.left = Math.min(start[2], p[2]) + "px"; rb.style.top = Math.min(start[3], p[3]) + "px";
+      rb.style.width = Math.abs(p[2] - start[2]) + "px"; rb.style.height = Math.abs(p[3] - start[3]) + "px";
+    });
+    ov.addEventListener("pointerup", (e) => {
+      if (!start) return;
+      const p = toBase(e);
+      if (rb) rb.remove(); rb = null;
+      const box = { x: Math.min(start[0], p[0]), y: Math.min(start[1], p[1]), w: Math.abs(p[0] - start[0]), h: Math.abs(p[1] - start[1]) };
+      start = null;
+      if (box.w * cur.s.scale > 8 && box.h * cur.s.scale > 8) {
+        setDrawing(false);
+        regions.push(Object.assign(box, { kind: "man", itemId: null }));
+        renderRegions();
+        select(regions.length - 1, false);
+      }
+    });
+  }
+  function setDrawing(on) {
+    drawing = on;
+    $("reg-manual").classList.toggle("on", on);
+    $("reg-manual-hint").style.display = on ? "" : "none";
+    try { const ov = cur && cur.w.document.getElementById("wbreg-ov"); if (ov) { ov.classList.toggle("drawing", on); ov.style.pointerEvents = on ? "auto" : "none"; } } catch (e) {}
+  }
+
+  // 差分箇所へ表示を移動
+  function focusRegion(r) {
+    const s = cur.s, w = cur.w;
+    const wrap = w.document.getElementById("stage-wrap");
+    if (!wrap) return;
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    const fit = Math.min(W / s.baseW, H / s.baseH) * 0.94;
+    const want = Math.min(W * 0.28 / Math.max(1, r.w), H * 0.28 / Math.max(1, r.h));
+    let sc = s.scale;
+    const onScreen = r.w * sc, onScreenH = r.h * sc;
+    if (onScreen > W * 0.9 || onScreenH > H * 0.9 || (onScreen < W * 0.12 && onScreenH < H * 0.12)) sc = Math.max(fit, Math.min(want, fit * 5));
+    s.scale = sc;
+    s.panX = -sc * (r.x + r.w / 2 - s.baseW / 2);
+    s.panY = -sc * (r.y + r.h / 2 - s.baseH / 2);
+    try { w.applyTransform(); } catch (e) {}
+  }
+
+  // ---------- パネル表示 ----------
+  function renderCtx() {
+    const box = $("reg-ctx");
+    box.textContent = "";
+    if (!cur || !cur.ok) {
+      const r = cur && cur.reason;
+      box.append(r === "dxf" ? "PDF→DXF は変換専用のため、変更登録は使いません。"
+        : r === "empty" ? "図面の読み込みを待っています…（比較の組を選ぶと差分を検出します）"
+        : "比較画面（JWW差分・JWW図枠差分・PDF差分）で図面を開くと、差分箇所を自動で検出します。");
+      $("reg-detect-area").style.display = "none";
+      return;
+    }
+    box.append(h("b", null, COMPARE[cur.app]), h("br"),
+      h("span", { class: "o" }, "旧 "), cur.oldName, h("br"),
+      h("span", { class: "n" }, "新 "), cur.newName);
+    if (cur.label && cur.app === "pdf") box.append(h("br"), cur.label);
+    $("reg-detect-area").style.display = "flex";
+  }
+
+  function renderRegions() {
+    const ul = $("reg-rlist"); ul.textContent = "";
+    const done = regions.filter((r) => r.itemId).length;
+    $("reg-rcount").textContent = regions.length ? `${regions.length}箇所（登録済 ${done}）` : "差分は見つかりませんでした";
+    regions.forEach((r, i) => {
+      const it = r.itemId && store.items.find((x) => x.id === r.itemId);
+      const sizeTxt = r.fromItem ? "登録範囲" : KIND_TEXT[r.kind];
+      ul.append(h("li", null, h("button", { type: "button", class: picks.includes(i) ? "sel" : "", onclick: (e) => { const add = e.ctrlKey || e.metaKey || e.shiftKey; select(i, !add, add); } },
+        h("span", { class: "num k-" + r.kind }, String(i + 1)),
+        h("span", null, sizeTxt + (it && it.detail ? "：" + it.detail.slice(0, 18) : "")),
+        it ? h("span", { class: "tag " + (it.status === "対象外" ? "skip" : "done") }, it.status === "対象外" ? "対象外" : "登録済 " + it.no) : null)));
+    });
+    renderOverlay(true);
+  }
+
+  function tradeBoxes(checked) {
+    const box = $("reg-trades"); box.textContent = "";
+    for (const t of TRADES) box.append(h("label", null, h("input", { type: "checkbox", value: t, checked: checked.includes(t) }), t));
+  }
+
+  function unionOf(ix) {
+    const rs = ix.map((j) => regions[j]);
+    if (rs.length === 1) return rs[0];
+    const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
+    const x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h));
+    const kinds = new Set(rs.map((r) => r.kind));
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, kind: kinds.size === 1 ? rs[0].kind : "mix",
+      parts: rs.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h })), members: ix.slice() };
+  }
+  function showThumb(reg) {
+    $("reg-thumb").removeAttribute("src");
+    setTimeout(() => {
+      if (!form || form.region !== reg) return;
+      try { reg.thumb = reg.thumb || cropImage(cur, reg); $("reg-thumb").src = reg.thumb; } catch (e) { console.error(e); }
+    }, 20);
+  }
+  function select(i, focus, additive) {
+    if (i < 0 || i >= regions.length) return;
+    const r = regions[i];
+    // Ctrl/Shift＋クリック：複数の差分を1件にまとめる
+    if (additive && form && form.mode === "new" && picks.length) {
+      if (r.itemId) { toast("登録済みの箇所はまとめられません。"); return; }
+      picks = picks.includes(i) ? picks.filter((x) => x !== i) : picks.concat(i).sort((a, b) => a - b);
+      if (!picks.length) { closeForm(); renderRegions(); return; }
+      selected = i;
+      form.region = unionOf(picks);
+      $("reg-form-title").textContent = `差分 ${picks.map((x) => x + 1).join("・")} を${picks.length > 1 ? "まとめて" : ""}登録`;
+      renderRegions();
+      showThumb(form.region);
+      return;
+    }
+    selected = i; picks = [i];
+    renderRegions();
+    if (focus) focusRegion(r);
+    const it = r.itemId && store.items.find((x) => x.id === r.itemId);
+    if (it) { openEdit(it.id); return; }
+    form = { mode: "new", region: r };
+    $("reg-form-title").textContent = `差分 ${i + 1} を登録`;
+    $("reg-save").textContent = "履歴に登録";
+    $("reg-skip").style.display = "";
+    $("reg-dwg").value = cur.drawing || "";
+    $("reg-place").value = "";
+    $("reg-detail").value = r.kind === "man" ? "" : KIND_TEXT[r.kind] + "：";
+    tradeBoxes([]);
+    $("reg-dir").value = r.kind === "add" ? "増額" : r.kind === "del" ? "減額" : "未定";
+    $("reg-amount").value = ""; $("reg-source").value = ""; $("reg-status").value = "未提示";
+    $("reg-form").style.display = "flex";
+    showThumb(r);
+    $("reg-place").focus({ preventScroll: true });
+    $("reg-form").scrollIntoView({ block: "nearest" });
+  }
+
+  function openEdit(id) {
+    const it = store.items.find((x) => x.id === id);
+    if (!it) return;
+    form = { mode: "edit", id };
+    $("reg-form-title").textContent = `${it.no} を編集`;
+    $("reg-save").textContent = "更新";
+    $("reg-skip").style.display = "none";
+    $("reg-dwg").value = it.drawing || ""; $("reg-place").value = it.place || ""; $("reg-detail").value = it.detail || "";
+    tradeBoxes(it.trades || []);
+    $("reg-dir").value = it.dir || "未定"; $("reg-amount").value = it.amount ?? ""; $("reg-source").value = it.source || "";
+    $("reg-status").value = it.status || "未提示";
+    if (it.thumb) $("reg-thumb").src = it.thumb; else $("reg-thumb").removeAttribute("src");
+    $("reg-form").style.display = "flex";
+    renderHist();
+    $("reg-form").scrollIntoView({ block: "nearest" });
+  }
+
+  function closeForm() { form = null; $("reg-form").style.display = "none"; renderHist(); }
+
+  function readForm() {
+    const amt = $("reg-amount").value.trim();
+    return {
+      drawing: $("reg-dwg").value.trim(), place: $("reg-place").value.trim(), detail: $("reg-detail").value.trim(),
+      trades: [...$("reg-trades").querySelectorAll("input:checked")].map((x) => x.value),
+      dir: $("reg-dir").value, amount: amt === "" ? null : Number(amt), source: $("reg-source").value.trim(), status: $("reg-status").value,
+    };
+  }
+
+  function saveForm(forceStatus) {
+    if (!form) return;
+    const v = readForm();
+    if (forceStatus) v.status = forceStatus;
+    const now = new Date().toISOString();
+    if (form.mode === "edit") {
+      const it = store.items.find((x) => x.id === form.id);
+      if (it) Object.assign(it, v, { updatedAt: now });
+      store.dirty++; persist(); closeForm(); renderRegions();
+      toast(`${it ? it.no : ""} を更新しました`);
+      return;
+    }
+    const r = form.region;
+    if (!cur || !cur.ok) return;
+    let thumb = r.thumb;
+    try { if (!thumb) thumb = cropImage(cur, r); } catch (e) {}
+    store.seq = (store.seq || 0) + 1;
+    const it = Object.assign({
+      id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      no: "C-" + String(store.seq).padStart(3, "0"),
+      createdAt: now, updatedAt: now,
+      app: cur.app, appLabel: COMPARE[cur.app], oldName: cur.oldName, newName: cur.newName, pageLabel: cur.app === "pdf" ? cur.label : "",
+      sig: cur.sig, box: { x: r.x, y: r.y, w: r.w, h: r.h }, parts: r.parts || null, kind: r.kind, thumb,
+    }, v);
+    store.items.push(it); store.dirty++;
+    const lastPick = picks.length ? Math.max(...picks) : selected;
+    (r.members ? r.members.map((j) => regions[j]) : [r]).forEach((x) => { if (x) x.itemId = it.id; });
+    persist();
+    toast(`${it.no} を${v.status === "対象外" ? "対象外として記録" : "登録"}しました`);
+    form = null; $("reg-form").style.display = "none";
+    renderRegions();
+    const next = regions.findIndex((x, j) => j > lastPick && !x.itemId);
+    const any = next >= 0 ? next : regions.findIndex((x) => !x.itemId);
+    if (any >= 0) select(any, true); else { selected = -1; picks = []; renderRegions(); }
+  }
+
+  function renderHist() {
+    const tb = $("reg-hbody"); tb.textContent = "";
+    const items = store.items.slice().sort((a, b) => String(a.no).localeCompare(String(b.no), "ja", { numeric: true }));
+    $("reg-hempty").style.display = items.length ? "none" : "";
+    const by = (st) => items.filter((x) => x.status === st).length;
+    const total = items.filter((x) => x.status !== "対象外" && x.amount != null && !isNaN(x.amount))
+      .reduce((s, x) => s + (x.dir === "減額" ? -1 : x.dir === "増額" ? 1 : 0) * Number(x.amount), 0);
+    $("reg-hcount").textContent = items.length
+      ? `${items.length}件（未提示 ${by("未提示")}・協議中 ${by("協議中")}・合意 ${by("合意")}）　概算計 ${total >= 0 ? "+" : "−"}${Math.abs(total).toLocaleString("ja-JP")}円` : "";
+    for (const it of items) {
+      const tr = h("tr", { class: "click" + (form && form.mode === "edit" && form.id === it.id ? " editing" : ""), title: "クリックで編集" },
+        h("td", null, it.no),
+        h("td", null, h("div", null, it.drawing || stem(it.newName)), h("div", { class: "muted" }, [it.place, it.detail].filter(Boolean).join("　") || "（内容未入力）")),
+        h("td", { style: "white-space:nowrap;" }, signed(it)),
+        h("td", null, h("span", { class: "st st-" + it.status }, it.status)),
+        h("td", null, h("button", { type: "button", class: "x", "aria-label": it.no + " を削除", title: "削除",
+          onclick: (e) => {
+            e.stopPropagation();
+            if (!confirm(`${it.no} を履歴から削除しますか？`)) return;
+            store.items = store.items.filter((x) => x.id !== it.id); store.dirty++;
+            for (const r of regions) if (r.itemId === it.id) r.itemId = null;
+            regions = regions.filter((r) => !(r.fromItem && !r.itemId));
+            if (form && form.mode === "edit" && form.id === it.id) closeForm();
+            persist(); renderRegions();
+          } }, "×")));
+      tr.addEventListener("click", () => {
+        if (cur && cur.ok && it.sig === cur.sig) {
+          const i = regions.findIndex((r) => r.itemId === it.id);
+          if (i >= 0) { selected = i; picks = regions.map((r, j) => r.itemId === it.id ? j : -1).filter((j) => j >= 0); renderRegions(); focusRegion(regions[i]); }
+        }
+        openEdit(it.id);
+      });
+      tb.append(tr);
+    }
+  }
+
+  function updateBadge() {
+    const c = $("reg-btn-cnt");
+    c.textContent = store.dirty ? String(store.dirty) : "";
+    c.style.display = store.dirty ? "" : "none";
+    c.title = store.dirty ? `未書き出しの変更 ${store.dirty}件` : "";
+    $("reg-savestate").textContent = store.dirty
+      ? `未書き出しの変更 ${store.dirty}件。区切りで「履歴を書き出し」し、共有ドライブの案件フォルダへ保存してください。`
+      : "登録内容はこのブラウザに自動保存されます。";
+  }
+
+  // ---------- 書き出し・読み込み ----------
+  const today = () => { const d = new Date(); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0"); };
+  const safeName = (s) => (String(s || "").trim() || "案件").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 60);
+  function save(blob, name) {
+    if (typeof window.__wbSave === "function") return window.__wbSave(blob, name);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  }
+  function exportJson() {
+    if (!store.items.length) { toast("登録がまだありません。"); return; }
+    const data = { format: "wb-change-history", version: 1, project: store.project, exportedAt: new Date().toISOString(), items: store.items };
+    save(new Blob([JSON.stringify(data)], { type: "application/json" }), `${safeName(store.project)}_変更履歴_${today()}.json`);
+    store.dirty = 0; persist();
+  }
+  function importJson(file) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      let data;
+      try { data = JSON.parse(rd.result); } catch (e) { toast("履歴ファイルとして読めませんでした。"); return; }
+      if (!data || data.format !== "wb-change-history" || !Array.isArray(data.items)) { toast("変更履歴の .json ではありません。"); return; }
+      if (store.project && data.project && data.project !== store.project &&
+        !confirm(`案件名が違います。\n読み込むファイル：${data.project}\n今の案件：${store.project}\n\n合わせて読み込みますか？`)) return;
+      if (!store.project && data.project) store.project = data.project;
+      let added = 0, updated = 0;
+      for (const it of data.items) {
+        if (!it || !it.id) continue;
+        const i = store.items.findIndex((x) => x.id === it.id);
+        if (i < 0) { store.items.push(it); added++; }
+        else if (String(it.updatedAt || "") > String(store.items[i].updatedAt || "")) { store.items[i] = it; updated++; }
+      }
+      const maxNo = store.items.reduce((m, x) => Math.max(m, parseInt(String(x.no || "").replace(/\D/g, ""), 10) || 0), 0);
+      store.seq = Math.max(store.seq || 0, maxNo);
+      $("reg-project").value = store.project;
+      persist();
+      if (cur && cur.ok) { regions = regions.filter((r) => !r.fromItem); linkRegions(); renderRegions(); }
+      toast(`読み込みました（追加 ${added}件・更新 ${updated}件）`);
+    };
+    rd.readAsText(file);
+  }
+  function exportCsv() {
+    if (!store.items.length) { toast("登録がまだありません。"); return; }
+    const head = ["No", "登録日", "案件", "比較の種類", "旧図面", "新図面", "図面・頁", "箇所", "変更内容", "影響工種", "増減", "概算増減額（円）", "指示元・根拠", "状態"];
+    const q = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    const rows = store.items.slice().sort((a, b) => String(a.no).localeCompare(String(b.no), "ja", { numeric: true })).map((it) => [
+      it.no, (it.createdAt || "").slice(0, 10).replace(/-/g, "/"), store.project, it.appLabel, it.oldName, it.newName, it.drawing,
+      it.place, it.detail, (it.trades || []).join("・"), it.dir,
+      it.amount == null || isNaN(it.amount) ? "" : (it.dir === "減額" ? -1 : 1) * Number(it.amount), it.source, it.status]);
+    const csv = "﻿" + [head, ...rows].map((r) => r.map(q).join(",")).join("\r\n");
+    save(new Blob([csv], { type: "text/csv" }), `${safeName(store.project)}_変更一覧_${today()}.csv`);
+  }
+
+  // ---------- 開閉と監視 ----------
+  function setOpen(on) {
+    open = on;
+    document.body.classList.toggle("reg-open", on);
+    $("reg-btn").setAttribute("aria-pressed", String(on));
+    if (on) { tick(); if (!raf) raf = requestAnimationFrame(loop); }
+    else { setDrawing(false); try { const ov = cur && cur.ok && cur.w.document.getElementById("wbreg-ov"); if (ov) ov.style.display = "none"; } catch (e) {} }
+    // アプリ画面の幅が変わるので、各アプリの再配置を促す
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+    document.querySelectorAll(".view iframe").forEach((f) => { try { f.contentWindow.dispatchEvent(new f.contentWindow.Event("resize")); } catch (e) {} });
+  }
+  function tick() {
+    if (!open) return;
+    const ctx = getCtx();
+    const prevOk = cur && cur.ok;
+    if (!ctx.ok) {
+      if (prevOk) clearOverlay(cur);
+      cur = ctx; regions = []; selected = -1; picks = []; lastKey = "";
+      if (form && form.mode === "new") closeForm();
+      setDrawing(false);
+      renderCtx();
+      return;
+    }
+    const sameWin = cur && cur.w === ctx.w;
+    cur = ctx;
+    if (ctx.key !== lastKey || !sameWin) {
+      lastKey = ctx.key;
+      regions = []; selected = -1; picks = []; setDrawing(false);
+      if (form && form.mode === "new") closeForm();
+      renderCtx();
+      detect();
+    }
+    if (!raf) raf = requestAnimationFrame(loop);
+  }
+  setInterval(tick, 700);
+
+  // ---------- 配線 ----------
+  $("reg-btn").addEventListener("click", () => setOpen(!open));
+  $("reg-close").addEventListener("click", () => setOpen(false));
+  $("reg-project").value = store.project || "";
+  $("reg-project").addEventListener("change", () => { store.project = $("reg-project").value.trim(); persist(); });
+  $("reg-redetect").addEventListener("click", () => { lastKey = ""; tick(); });
+  $("reg-manual").addEventListener("click", () => setDrawing(!drawing));
+  $("reg-manual-cancel").addEventListener("click", () => setDrawing(false));
+  $("reg-cancel").addEventListener("click", () => { closeForm(); selected = -1; picks = []; renderRegions(); });
+  $("reg-skip").addEventListener("click", () => saveForm("対象外"));
+  $("reg-form").addEventListener("submit", (e) => { e.preventDefault(); saveForm(); });
+  $("reg-export").addEventListener("click", exportJson);
+  $("reg-import").addEventListener("click", () => $("reg-import-file").click());
+  $("reg-import-file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) importJson(f); e.target.value = ""; });
+  $("reg-csv").addEventListener("click", exportCsv);
+  renderHist(); updateBadge(); renderCtx();
+
+  // テスト・保守用
+  window.__wbReg = { getCtx, detect: () => { lastKey = ""; tick(); }, regions: () => regions, store: () => store, select, setOpen };
 })();
 </script>
 </body>
